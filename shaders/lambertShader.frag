@@ -4,6 +4,7 @@
 in vec3 objectPosition;
 in vec3 viewPosition;
 in vec3 viewNormal;
+in vec3 vertexColor;
 
 // uniform variables, same for all fragments
 uniform sampler2D colorTexture;
@@ -16,8 +17,8 @@ void main()
 	// compute simple lambert lighting with light at camera position and no distance-based falloff
 	vec3 n = normalize(viewNormal);
 	vec3 l = -normalize(viewPosition);
-	vec3 c = vec3(0.6,0.6,0.6);
-	vec3 lit = c * vec3(max(dot(n, l), 0.0));
+	vec3 c = vertexColor;
+	vec3 lit = c * vec3(min(max(dot(n, l), 0.0), 0.5));
 	// write output color
 	color = vec4(lit, 1.0);
 }

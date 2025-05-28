@@ -3,6 +3,7 @@
 // input attributes, different for each vertex
 in vec3 position;
 in vec3 normal;
+in vec3 color;
 
 // uniform variables, same for all vertices
 uniform mat4 projection;
@@ -12,11 +13,13 @@ uniform mat4 modelView;
 out vec3 objectPosition;
 out vec3 viewPosition;
 out vec3 viewNormal;
+out vec3 vertexColor;
 
 void main()
 {
 	// forward position in object/model space to fragment shader
 	objectPosition = position;
+	vertexColor = color;
 	// compute and forward position in view space to fragment shader
 	vec4 vp = modelView * vec4(position, 1.0);
 	viewPosition = vp.xyz;
