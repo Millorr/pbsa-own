@@ -78,3 +78,5 @@ Eigen::Matrix4d calculateLookAtMatrix(Eigen::Vector3d eye, Eigen::Vector3d cente
 
 // helper function to load a Qt resource as an array of char (bytes)
 std::vector<char> loadResource(char const * path);
+
+std::string vectorToString(const Eigen::Vector3d& vec);

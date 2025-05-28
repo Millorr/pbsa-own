@@ -1,5 +1,9 @@
 #include "helpers.hpp"
 
+#include <Eigen/Dense>
+#include <sstream>
+#include <string>
+
 #include <cmath>
 
 #include <unordered_map>
@@ -97,4 +101,10 @@ std::vector<char> loadResource(char const * path)
 	auto read = f.read(buf.data(), size);
 	assert(read == size); (void)read;
 	return buf;
+}
+
+std::string vectorToString(const Eigen::Vector3d& vec) {
+	std::ostringstream oss;
+	oss << "[" << vec.x() << ", " << vec.y() << ", " << vec.z() << "]";
+	return oss.str();
 }
