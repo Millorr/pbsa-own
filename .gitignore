@@ -3,3 +3,4 @@ build/
 glad/
 .vscode/
 venv/
+/.vs

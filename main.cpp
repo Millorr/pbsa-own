@@ -21,7 +21,7 @@
 #include "Prog1_1Simulation.hpp"
 #include "Prog1_2Simulation.hpp"
 #include "Prog1_3Simulation.hpp"
-
+#include "Prog2_1Simulation.hpp"
 
 #ifdef _WIN32
 // always use (proper) hardware acceleration if available, since Intel's iGPUs have extremely buggy OpenGL support
@@ -50,11 +50,11 @@ void addExampleTab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 	});
 }
 
-void addEx1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
+void addEx1_1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 {
 	auto current = tabWidget->count();
 	auto tab = new QWidget{tabWidget};
-	tabWidget->addTab(tab, "Exercise 1");
+	tabWidget->addTab(tab, "Exercise 1.1");
 
 	// Layouts
 	auto mainLayout = new QVBoxLayout{tab};
@@ -166,11 +166,11 @@ void addEx1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 	});
 }
 
-void addEx2Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
+void addEx1_2Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 {
 	int current = tabWidget->count();
 	QWidget* tab = new QWidget{tabWidget};
-	tabWidget->addTab(tab, "Exercise 2");
+	tabWidget->addTab(tab, "Exercise 1.2");
 
 	// Layouts
 	auto mainLayout = new QVBoxLayout{tab};
@@ -310,11 +310,11 @@ void addEx2Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 	});
 }
 
-void addEx3Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
+void addEx1_3Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 {
 	auto current = tabWidget->count();
 	auto tab = new QWidget{tabWidget};
-	tabWidget->addTab(tab, "Exercise 3");
+	tabWidget->addTab(tab, "Exercise 1.3");
 
 	// Layouts
 	auto mainLayout = new QVBoxLayout{tab};
@@ -392,22 +392,161 @@ void addEx3Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 	});
 
 }
+void addEx2_1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
+{
+	auto current = tabWidget->count();
+	auto tab = new QWidget{tabWidget};
+	tabWidget->addTab(tab, "Exercise 2.1");
+
+	// Layouts
+	auto mainLayout = new QVBoxLayout{tab};
+	auto controlLayout = new QVBoxLayout{};
+	auto controlGroup = new QGroupBox{"Simulation Controls"};
+	controlGroup->setLayout(controlLayout);
+
+	// scale 
+	auto scaleLayout = new QHBoxLayout{};
+	auto scaleLabel = new QLabel{"Scale"};
+	auto scaleSpin = new QDoubleSpinBox{};
+	scaleSpin->setRange(0.0001, 100.0);
+	scaleSpin->setDecimals(5);
+	scaleSpin->setValue(5.00);
+	scaleLayout->addWidget(scaleLabel);
+	scaleLayout->addWidget(scaleSpin);
+	controlLayout->addLayout(scaleLayout);
+
+	// a (Tempteraturleitfähigkeit)
+	auto aLayout = new QHBoxLayout{};
+	auto aLabel = new QLabel{"a (Tempteraturleitfähigkeit)"};
+	auto aSpin = new QDoubleSpinBox{};
+	aSpin->setRange(0.0001, 1.0);
+	aSpin->setDecimals(5);
+	aSpin->setValue(0.1);
+	aLayout->addWidget(aLabel);
+	aLayout->addWidget(aSpin);
+	controlLayout->addLayout(aLayout);
+
+	// delta t (Zeitschritt)
+	auto dtLayout = new QHBoxLayout{};
+	auto dtLabel = new QLabel{"Δt (Zeitschritt)"};
+	auto dtSpin = new QDoubleSpinBox{};
+	dtSpin->setRange(0.0001, 100.0);
+	dtSpin->setDecimals(5);
+	dtSpin->setValue(0.1);
+	dtLayout->addWidget(dtLabel);
+	dtLayout->addWidget(dtSpin);
+	controlLayout->addLayout(dtLayout);
+
+	// Reset-Button
+	auto resetButton = new QPushButton{"Reset"};
+	controlLayout->addWidget(resetButton);
+
+	auto glWidget = new QWidget{}; // Platzhalter
+	// -> Das tatsächliche Widget wird über das RendererFactory erstellt und dann hier gesetzt
+
+	mainLayout->addWidget(controlGroup);
+	mainLayout->addWidget(glWidget, 1);
+	QWidget::connect(tabWidget, &QTabWidget::currentChanged, [=] (int index) {
+		if(index != current)
+			return;
+
+		mainWindow->setRendererFactory(
+			[=] (QObject * parent) {
+			auto sim = new Prog2_1Simulation{};
+			sim->setParent(parent);
+
+			QObject::connect(resetButton, &QPushButton::clicked, [=] () {
+				sim->reset(
+					dtSpin->value(),
+					aSpin->value()
+				);
+			});
+
+			QObject::connect(scaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [=] (double scale) mutable {
+				sim->setTemperatureScale(
+					scale
+				);
+			});
+
+			return sim;
+		}
+		);
+	});
+
+}
+
+void addExercise1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
+{
+	auto current = tabWidget->count();
+	auto exerciseTab = new QWidget{tabWidget};
+	tabWidget->addTab(exerciseTab, "Exercise 1");
+
+	// Unter-TabWidget für die einzelnen Exercises
+	auto subTabWidget = new QTabWidget{exerciseTab};
+	subTabWidget->setTabPosition(QTabWidget::TabPosition::North);
+
+	// Layout für den Übung 1 Tab
+	auto layout = new QVBoxLayout{exerciseTab};
+	layout->addWidget(subTabWidget);
+
+	// Die bisherigen Exercise-Tabs als Unter-Tabs hinzufügen
+	addEx1_1Tab(mainWindow, subTabWidget);
+	addEx1_2Tab(mainWindow, subTabWidget);
+	addEx1_3Tab(mainWindow, subTabWidget);
+
+	subTabWidget->setCurrentIndex(0);
+
+	// Beim Wechsel auf diesen Haupt-Tab das aktuelle Sub-Tab triggern
+	QObject::connect(tabWidget, &QTabWidget::currentChanged, [=] (int index) {
+		if(index == current)
+		{
+			emit subTabWidget->currentChanged(subTabWidget->currentIndex());
+		}
+	});
+}
+
+void addExercise2Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
+{
+	auto current = tabWidget->count();
+	auto exerciseTab = new QWidget{tabWidget};
+	tabWidget->addTab(exerciseTab, "Exercise 2");
+
+	// Unter-TabWidget für die einzelnen Exercises
+	auto subTabWidget = new QTabWidget{exerciseTab};
+	subTabWidget->setTabPosition(QTabWidget::TabPosition::North);
+
+	// Layout für den Übung 1 Tab
+	auto layout = new QVBoxLayout{exerciseTab};
+	layout->addWidget(subTabWidget);
+
+	// Die bisherigen Exercise-Tabs als Unter-Tabs hinzufügen
+	addEx2_1Tab(mainWindow, subTabWidget);
+
+	subTabWidget->setCurrentIndex(0);
+
+	QObject::connect(tabWidget, &QTabWidget::currentChanged, [=] (int index) {
+		if(index == current)
+		{
+			emit subTabWidget->currentChanged(subTabWidget->currentIndex());
+		}
+	});
+}
+
 void addSimulationControls(GLMainWindow * mainWindow)
 {
 	auto dock = new QDockWidget("Simulation controls", mainWindow);
 	dock->setAllowedAreas(Qt::DockWidgetArea::RightDockWidgetArea);
 
-	auto tabWidget = new QTabWidget(dock);
-	tabWidget->setTabPosition(QTabWidget::TabPosition::West);
-	dock->setWidget(tabWidget);
+	 auto tabWidget = new QTabWidget(dock);
+    tabWidget->setTabPosition(QTabWidget::TabPosition::West);
+    dock->setWidget(tabWidget);
 
-	addExampleTab(mainWindow, tabWidget);
-	addEx1Tab(mainWindow, tabWidget);
-	addEx2Tab(mainWindow, tabWidget);
-	addEx3Tab(mainWindow, tabWidget);
-	tabWidget->setCurrentIndex(0);
+    addExampleTab(mainWindow, tabWidget);
+    addExercise1Tab(mainWindow, tabWidget); // Nur noch ein Tab für alle Übungen
+	addExercise2Tab(mainWindow, tabWidget); // Übung 2 Tab
+    tabWidget->setCurrentIndex(0);
 
-	mainWindow->addDockWidget(Qt::DockWidgetArea::RightDockWidgetArea, dock);
+    mainWindow->addDockWidget(Qt::DockWidgetArea::RightDockWidgetArea, dock);
 }
 
 int main(int argc, char ** argv)

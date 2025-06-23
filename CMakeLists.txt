@@ -116,6 +116,7 @@ target_sources(
     Prog1_1Simulation.cpp Prog1_1Simulation.hpp
     Prog1_2Simulation.cpp Prog1_2Simulation.hpp
     Prog1_3Simulation.cpp Prog1_3Simulation.hpp
+	Prog2_1Simulation.cpp Prog2_1Simulation.hpp
     helpers.hpp helpers.cpp
     constants.hpp
     shaders/icosphere.vert shaders/icosphere.frag
