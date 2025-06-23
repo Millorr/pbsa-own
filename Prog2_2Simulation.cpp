@@ -12,62 +12,13 @@ Prog2_2Simulation::Prog2_2Simulation()
 	: OpenGLRenderer{nullptr}
 {
 
-	buildSystemMatrix();
-	this->solver.compute(this->system_matrix);
-	setInitialConditions();
 
 	{
 		// create/bind a vertex array object to store bindings to array and element buffers
 		glBindVertexArray(this->gridVAO.id());
 
-		// sehr ineffizient, aber einfach zu verstehen
-		// build the required vertex and index arrays
-		vertices.clear();
-		indices.clear();
-		for(int i = 0; i < grid_size; ++i)
-		{
-			for(int j = 0; j < grid_size; ++j)
-			{
-				// Position
-				float x = -1.0f + 2.0f * j / (grid_size - 1);
-				float y = -1.0f + 2.0f * i / (grid_size - 1);
-				float z = u(getIndex(i,j));
-				vertices.push_back(x);
-				vertices.push_back(y);
-				vertices.push_back(z);
-
-				// Normals
-				Eigen::Vector3d normal = calculateNormal(i, j);
-
-				vertices.push_back(normal.x());
-				vertices.push_back(normal.y());  
-				vertices.push_back(normal.z());
-
-				// Farben (blau bis rot)
-				float value = std::clamp(static_cast<float>(u(getIndex(i, j))), 0.0f, 1.0f);
-				float r = value;
-				float g = 0.0f;
-				float b = 1.0f - value;
-				vertices.push_back(r);
-				vertices.push_back(g);
-				vertices.push_back(b);
-			}
-		}
-		// Indices für zwei Dreiecke pro Zelle
-		for(int i = 0; i < grid_size - 1; ++i)
-		{
-			for(int j = 0; j < grid_size - 1; ++j)
-			{
-				int idx = i * grid_size + j;
-				indices.push_back(idx);
-				indices.push_back(idx + 1);
-				indices.push_back(idx + grid_size);
-
-				indices.push_back(idx + 1);
-				indices.push_back(idx + grid_size + 1);
-				indices.push_back(idx + grid_size);
-			}
-		}
+		buildMesh();
+		buildCloth();
 
 		// create/bind an array buffer object and fill it with the vertices we computed (GL_DYNAMIC_DRAW, as it needs to be modified)
 		glBindBuffer(GL_ARRAY_BUFFER, this->gridVertexBuffer.id());
@@ -75,20 +26,12 @@ Prog2_2Simulation::Prog2_2Simulation()
 
 
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->gridIndexBuffer.id());
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_DYNAMIC_DRAW);
 
 
 		// Vertex Attribute für Position
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void *)0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
 		glEnableVertexAttribArray(0);
-
-		// Vertex Attribute für Normalen
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void *)(3 * sizeof(float)));
-		glEnableVertexAttribArray(1);
-
-		// Vertex Attribute für Farbe
-		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void *)(6 * sizeof(float)));
-		glEnableVertexAttribArray(2);
 
 		// unbind the vertex array object as we are done modifying it
 		glBindVertexArray(0);
@@ -105,11 +48,11 @@ Prog2_2Simulation::Prog2_2Simulation()
 		std::vector<char> text;
 
 		// load and compile vertex shader
-		text = loadResource("shaders/lambertShader.vert");
+		text = loadResource("shaders/clothShader.vert");
 		vertexShader.compile(text.data(), static_cast<GLint>(text.size()));
 
 		// load and compile fragment shader
-		text = loadResource("shaders/lambertShader.frag");
+		text = loadResource("shaders/clothShader.frag");
 		fragmentShader.compile(text.data(), static_cast<GLint>(text.size()));
 
 		// link shader program and check for errors. shader objects are no longer required
@@ -121,8 +64,6 @@ Prog2_2Simulation::Prog2_2Simulation()
 
 		// set which vertex attribute index is bound to position
 		glBindAttribLocation(this->gridProgram.id(), 0, "position");
-		glBindAttribLocation(this->gridProgram.id(), 1, "normal");
-		glBindAttribLocation(this->gridProgram.id(), 2, "color");
 	}
 
 	{
@@ -186,7 +127,7 @@ Prog2_2Simulation::Prog2_2Simulation()
 	glDepthFunc(GL_LESS);
 	glClearDepth(1.);
 
-	glEnable(GL_CULL_FACE);
+	glDisable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
 	glFrontFace(GL_CCW);
 
@@ -196,6 +137,67 @@ Prog2_2Simulation::Prog2_2Simulation()
 
 Prog2_2Simulation::~Prog2_2Simulation() = default;
 
+
+void Prog2_2Simulation::buildMesh()
+{
+	// sehr ineffizient, aber einfach zu verstehen
+		// build the required vertex and index arrays
+	vertices.clear();
+	indices.clear();
+
+	for(int i = 0; i < grid_size; ++i)
+	{
+		for(int j = 0; j < grid_size; ++j)
+		{
+			// Position
+			float x = dx * j - dx * (grid_size - 1) / 2;
+			float y = dx * i - dx * (grid_size - 1) / 2;
+			float z = 0.0f;
+			vertices.push_back(x);
+			vertices.push_back(y);
+			vertices.push_back(z);
+		}
+	}
+	// Indices für zwei Dreiecke pro Zelle
+	for(int i = 0; i < grid_size - 1; ++i)
+	{
+		for(int j = 0; j < grid_size - 1; ++j)
+		{
+			int idx = i * grid_size + j;
+			indices.push_back(idx);
+			indices.push_back(idx + 1);
+			indices.push_back(idx + grid_size);
+
+			indices.push_back(idx + 1);
+			indices.push_back(idx + grid_size + 1);
+			indices.push_back(idx + grid_size);
+		}
+	}
+}
+
+void Prog2_2Simulation::buildCloth()
+{
+
+	// Vektoren initialisieren
+	positions.resize(3 * grid_size * grid_size);
+	velocities.resize(3 * grid_size * grid_size);
+
+	velocities.setZero();  // Alle Geschwindigkeiten auf 0
+
+	// Anfangspositionen setzen (undeformiert, parallel zum Boden)
+	for(int i = 0; i < grid_size; ++i)
+	{
+		for(int j = 0; j < grid_size; ++j)
+		{
+			int idx = getVectorIndex(i, j);
+
+			// Position in Metern
+			positions[idx + 0] = j * dx;
+			positions[idx + 1] = i * dx;
+			positions[idx + 2] = 0.0f;
+		}
+	}
+}
 
 void Prog2_2Simulation::resize(int w, int h)
 {
@@ -229,7 +231,7 @@ void Prog2_2Simulation::render()
 		auto ca = std::cos(this->cameraAzimuth);
 		auto se = std::sin(this->cameraElevation);
 		auto ce = std::cos(this->cameraElevation);
-		auto distance = 4.;
+		auto distance = this->cameraDistance;
 		this->viewMatrix = calculateLookAtMatrix(
 			distance * Eigen::Vector3d{se * ca, se * sa, ce},
 			{0, 0, 0},
@@ -262,31 +264,17 @@ void Prog2_2Simulation::render()
 		//qDebug() << "FPS: " << 1.0 / (deltaTimeNS / 1.0e09) << " simsteps: " << simSteps << " center: " << this->u(getIndex(grid_size/2, grid_size/2)) << " sum: " << this->u.sum();
 		//qDebug() << "Kamera: " << cameraAzimuth << " eli: " << cameraElevation;
 
-		auto u_max = this->u.maxCoeff();
+		//auto u_max = this->u.maxCoeff();
 
 		for(int i = 0; i < grid_size; ++i)
 		{
 			for(int j = 0; j < grid_size; ++j)
 			{
-				int idx = (i * grid_size + j) * 9 + 2; // Z-Komponente
-				// Aktualisiere die Z-Komponente der vertecies
-				vertices[idx] = u(getIndex(i, j));
+				int idx = getVectorIndex(i, j);
 
-				// Aktualisiere die Normalen
-				Eigen::Vector3d normal = calculateNormal(i, j);
-
-				vertices[idx + 1] = normal.x();
-				vertices[idx + 2] = normal.y();
-				vertices[idx + 3] = normal.z();
-
-				// Farbe neu berechnen (blau bis rot)
-				float value = std::clamp(static_cast<float>(u(getIndex(i, j)) / u_max), 0.0f, 1.0f);
-				float r = value;
-				float g = 0.0f;
-				float b = 1.0f - value;
-				vertices[idx + 4] = r;
-				vertices[idx + 5] = g;
-				vertices[idx + 6] = b;
+				vertices[idx]		= positions[idx];
+				vertices[idx + 1]	= positions[idx + 1];
+				vertices[idx + 2]	= positions[idx + 2];
 			}
 		}
 		glBindBuffer(GL_ARRAY_BUFFER, gridVertexBuffer.id());
@@ -350,8 +338,35 @@ void Prog2_2Simulation::mouseEvent(QMouseEvent * e)
 
 Eigen::VectorXd Prog2_2Simulation::step()
 {
-	this->u = solver.solve(this->u);
-	return this->u;
+	if(firstStep)
+	{
+		lastTimeNS = timer.nsecsElapsed();
+		firstStep = false;
+		return positions;  // Ersten Frame überspringen
+	}
+
+	// do stuff
+	applyBoundaryConditions();
+
+	return positions;
+}
+
+
+void Prog2_2Simulation::applyBoundaryConditions()
+{
+	if(boundaryCondition == BoundaryCondition::SINGLE_CORNER)
+	{
+		positions.segment<3>(getVectorIndex(0, 0)) = Eigen::Vector3d(0.0, 0.0, 0.0);
+		velocities.segment<3>(getVectorIndex(0, 0)).setZero();
+	}
+	else if(boundaryCondition == BoundaryCondition::BOTH_CORNERS)
+	{
+		positions.segment<3>(getVectorIndex(0, 0)) = Eigen::Vector3d(0.0, 0.0, 0.0);
+		velocities.segment<3>(getVectorIndex(0, 0)).setZero();
+
+		positions.segment<3>(getVectorIndex(32, 0)) = Eigen::Vector3d(32 * dx, 0.0, 0.0);
+		velocities.segment<3>(getVectorIndex(32, 0)).setZero();
+	}
 }
 
 int Prog2_2Simulation::getIndex(int i, int j) const
@@ -360,92 +375,44 @@ int Prog2_2Simulation::getIndex(int i, int j) const
 	return i * grid_size + j;
 }
 
-void Prog2_2Simulation::buildSystemMatrix()
+int Prog2_2Simulation::getVectorIndex(int i, int j) const
 {
-	const int N = grid_size * grid_size;
-
-	// Beginne mit Identitätsmatrix I
-	// N * N Matrix, da wir GRID_SIZE x GRID_SIZE Knoten haben
-	// Und wir abbilden wollen wie viel Einfluss jeder Knoten auf jeden anderen hat
-	system_matrix = Eigen::SparseMatrix<double>(N, N);
-	system_matrix.setIdentity();
-
-	// Faktor für finite Differenzen: a*dt/dx²
-	const double factor = dt; // default: 0.0000001
-
-	// Durchlaufe alle Gitterpunkte
-	for(int i = 0; i < grid_size; i++)
-	{
-		for(int j = 0; j < grid_size; j++)
-		{
-			int idx = getIndex(i, j);
-
-			// Randbedingungen: u = 0 am gesamten Rand
-			if(i == 0 || i == grid_size - 1 || j == 0 || j == grid_size - 1)
-			{
-				// Für Randknoten: Matrix-Zeile bleibt [0...0 1 0...0]
-				// Das erzwingt u[idx] = 0 (Dirichlet-Randbedingung)
-				continue;
-			}
-
-
-			// (I - dt*a*L) * u_t+1 = u_t
-			// Hauptdiagonale: 1 + 4*factor (vom -4 im Laplace-Operator)
-            system_matrix.coeffRef(idx, idx) = 1.0 + 4.0 * factor;
-
-			// 5-Punkt-Stencil: Nachbarn mit -factor
-			// Refernce zu den Nachbarn setzen (-1, 0), (1, 0), (0, -1), (0, 1)
-			// 9 Punkte geht auch, aber weiß nicht so ganz, ob das richtig wäre, da es dann über dx von 1 hinaus gehen würde.
-			system_matrix.coeffRef(idx, getIndex(i - 1, j)) = -factor;  // Links
-			system_matrix.coeffRef(idx, getIndex(i + 1, j)) = -factor;  // Rechts
-			system_matrix.coeffRef(idx, getIndex(i, j - 1)) = -factor;  // Unten  
-			system_matrix.coeffRef(idx, getIndex(i, j + 1)) = -factor;  // Oben
-		}
-	}
+	return getIndex(i, j) * 3;  // Start-Index für x,y,z
 }
 
-void Prog2_2Simulation::setInitialConditions()
+int Prog2_2Simulation::getVectorIndex(int particle_idx) const
 {
-	this->u = Eigen::VectorXd(grid_size*grid_size);
-	this->u.setZero(); // Setze alle Knoten auf 0.0 (Anfangstemperatur)
-
-	int mid = grid_size / 2;
-	int centerIndex = getIndex(mid, mid);
-	// Setze den zentralen Knoten auf 1.0 (Anfangstemperatur)
-	this->u(centerIndex) = 1.0;
+	return particle_idx * 3;  // Start-Index für x,y,z
 }
 
-Eigen::Vector3d Prog2_2Simulation::calculateNormal(int i, int j) const
-{
-	// Randbehandlung: Normale nach oben
-	if(i <= 0 || i >= grid_size - 1 || j <= 0 || j >= grid_size - 1)
-		return Eigen::Vector3d(0, 0, 1);
 
-	// Zentrale Differenzen
-	float dzdx = static_cast<float>(u(getIndex(i, j + 1)) - u(getIndex(i, j - 1))) / (2.0f * dx);
-	float dzdy = static_cast<float>(u(getIndex(i + 1, j)) - u(getIndex(i - 1, j))) / (2.0f * dx);
-
-	// Normale: (-dz/dx, -dz/dy, 1)
-	Eigen::Vector3d n = {-dzdx, -dzdy, 1.0f};
-	n.normalize();
-	return n;
-}
 
 void Prog2_2Simulation::reset(
 	double dt0Param,
+	BoundaryCondition boundaryConditionParam,
 	double structKsParam, double structKdParam,
 	double sheerKsParam, double sheerKdParam,
 	double bendingKsParam, double bendingKdParam
 )
 {
 	this->dt = dt0Param;
-
-	buildSystemMatrix();
-	this->solver.compute(this->system_matrix);
-	setInitialConditions();
+	this->boundaryCondition = boundaryConditionParam;
+	this->structureSpring = spring(structKsParam, structKdParam);
+	this->sheerSpring = spring(sheerKsParam, sheerKdParam);
+	this->bendingSpring = spring(bendingKsParam, bendingKdParam);
 
 	qDebug() << "Reset simulation with parameters:"
-		<< "dt0:" << dt;
+		<< "dt0:" << dt
+		<< "boundaryCondition:" << static_cast<int>(boundaryConditionParam)
+		<< "structKs:" << structKsParam
+		<< "structKd:" << structKdParam
+		<< "sheerKs:" << sheerKsParam
+		<< "sheerKd:" << sheerKdParam
+		<< "bendingKs:" << bendingKsParam
+		<< "bendingKd:" << bendingKdParam;
+
+
+	buildCloth();
 
 	this->lastTimeNS = this->timer.nsecsElapsed();
 	this->timer.restart();

@@ -177,26 +177,26 @@ void Prog2_1Simulation::buildMesh()
 
 void Prog2_1Simulation::buildCloth()
 {
-
 	// Vektoren initialisieren
 	positions.resize(3 * grid_size * grid_size);
 	velocities.resize(3 * grid_size * grid_size);
 	forces.resize(3 * grid_size * grid_size);
 
-	velocities.setZero();  // Alle Geschwindigkeiten auf 0
-	forces.setZero();  // Alle Kräfte auf 0
+	velocities.setZero();
+	forces.setZero();
+
 
 	// Anfangspositionen setzen (undeformiert, parallel zum Boden)
 	for(int i = 0; i < grid_size; ++i)
 	{
 		for(int j = 0; j < grid_size; ++j)
 		{
-			int idx = getIndex(i, j);
+			int idx = getVectorIndex(i, j);
 
 			// Position in Metern
-			positions[3 * idx + 0] = i * dx;
-			positions[3 * idx + 1] = j * dx;
-			positions[3 * idx + 2] = 0.0f;
+			positions[idx + 0] = j * dx;
+			positions[idx + 1] = i * dx;
+			positions[idx + 2] = 0.0f;
 		}
 	}
 }
@@ -220,7 +220,7 @@ void Prog2_1Simulation::render()
 	this->lastTimeNS = currentTimeNS;
 	qint64 simSteps = (currentTimeNS / this->dt / 1e9) - this->lastSimSteps;
 	this->lastSimSteps += simSteps;
-
+	simSteps = std::min(simSteps, maxSimSteps);
 	int loc = -1;
 
 	// clear color and depth buffer to black
@@ -263,7 +263,7 @@ void Prog2_1Simulation::render()
 		{
 			this->step();
 		}
-		//qDebug() << "FPS: " << 1.0 / (deltaTimeNS / 1.0e09) << " simsteps: " << simSteps << " center: " << this->u(getIndex(grid_size/2, grid_size/2)) << " sum: " << this->u.sum();
+		//qDebug() << "FPS: " << 1.0 / (deltaTimeNS / 1.0e09) << " simsteps: " << simSteps;
 		//qDebug() << "Kamera: " << cameraAzimuth << " eli: " << cameraElevation;
 
 		//auto u_max = this->u.maxCoeff();
@@ -272,11 +272,11 @@ void Prog2_1Simulation::render()
 		{
 			for(int j = 0; j < grid_size; ++j)
 			{
-				int idx = getIndex(i, j) * 3;
+				int idx = getVectorIndex(i, j);
 
-				vertices[idx]		= positions[3 * getIndex(i, j)];
-				vertices[idx + 1]	= positions[3 * getIndex(i, j) + 1];
-				vertices[idx + 2]	= positions[3 * getIndex(i, j) + 2];
+				vertices[idx]		= positions[idx];
+				vertices[idx + 1]	= positions[idx + 1];
+				vertices[idx + 2]	= positions[idx + 2];
 			}
 		}
 		glBindBuffer(GL_ARRAY_BUFFER, gridVertexBuffer.id());
@@ -371,16 +371,16 @@ void Prog2_1Simulation::computeForces()
 			int idx = getIndex(i, j);
 
 			// Strukturfedern (horizontal und vertikal)
-			addSpringForce(i, j, i + 1, j, structureSpring);     // Rechts
-			addSpringForce(i, j, i, j + 1, structureSpring);     // Oben
+			addSpringForce(i, j, i + 1, j, structureSpring);     // oben
+			addSpringForce(i, j, i, j + 1, structureSpring);     // rechts
 
 			// Scherfedern (diagonal)
 			addSpringForce(i, j, i + 1, j + 1, sheerSpring);       // Diagonal rechts-oben
-			addSpringForce(i, j, i + 1, j - 1, sheerSpring);       // Diagonal rechts-unten
+			addSpringForce(i, j, i + 1, j - 1, sheerSpring);       // Diagonal links-oben
 
 			// Biegefedern (2er-Abstand)
-			addSpringForce(i, j, i + 2, j, bendingSpring);       // 2 nach rechts
-			addSpringForce(i, j, i, j + 2, bendingSpring);       // 2 nach oben
+			addSpringForce(i, j, i + 2, j, bendingSpring);       // 2 nach oben
+			addSpringForce(i, j, i, j + 2, bendingSpring);       // 2 nach rechts
 		}
 	}
 }
@@ -393,26 +393,27 @@ void Prog2_1Simulation::addSpringForce(int i1, int j1, int i2, int j2, const spr
 		return;
 	}
 
-	int idx1 = getIndex(i1, j1);
-	int idx2 = getIndex(i2, j2);
+	int idx1 = getVectorIndex(i1, j1);
+	int idx2 = getVectorIndex(i2, j2);
 
 	// Positionen und Geschwindigkeiten extrahieren
-	Eigen::Vector3d pos1 = positions.segment<3>(3 * idx1);
-	Eigen::Vector3d pos2 = positions.segment<3>(3 * idx2);
-	Eigen::Vector3d vel1 = velocities.segment<3>(3 * idx1);
-	Eigen::Vector3d vel2 = velocities.segment<3>(3 * idx2);
+	Eigen::Vector3d pos1 = positions.segment<3>(idx1);
+	Eigen::Vector3d pos2 = positions.segment<3>(idx2);
+	Eigen::Vector3d vel1 = velocities.segment<3>(idx1);
+	Eigen::Vector3d vel2 = velocities.segment<3>(idx2);
 
 	// Relative Vektoren
 	Eigen::Vector3d x_ij = pos2 - pos1;
 	Eigen::Vector3d v_ij = vel2 - vel1;
 
-	double length = x_ij.norm();
-	if(length < 1e-12) return;  // Schutz vor Division durch 0
+	double x_ij_norm = x_ij.norm();
 
-	Eigen::Vector3d x_ij_hat = x_ij / length;
+	if(x_ij_norm < 1e-12) return;  // Schutz vor Division durch 0
+
+	Eigen::Vector3d x_ij_hat = x_ij / x_ij_norm;
 
 	// Ruhelänge der Feder
-	double rest_length = 0.0;
+	double rest_length = dx;
 	if(spr.type == spring::Type::Structure)
 	{
 		rest_length = dx;  // Strukturfedern haben eine Ruhelänge von dx
@@ -427,7 +428,7 @@ void Prog2_1Simulation::addSpringForce(int i1, int j1, int i2, int j2, const spr
 	}
 
 	// Federkraft berechnen (Gleichung 2 aus der Aufgabe)
-	double spring_force_magnitude = spr.ks * (length - rest_length);
+	double spring_force_magnitude = spr.ks * (x_ij_norm - rest_length);
 	double damping_force_magnitude = spr.kd * v_ij.dot(x_ij_hat);
 
 	double total_force_magnitude = spring_force_magnitude + damping_force_magnitude;
@@ -435,8 +436,8 @@ void Prog2_1Simulation::addSpringForce(int i1, int j1, int i2, int j2, const spr
 	Eigen::Vector3d force = total_force_magnitude * x_ij_hat;
 
 	// Kräfte auf beide Punkte anwenden (Newton's 3. Gesetz)
-	forces.segment<3>(3 * idx1) += force;
-	forces.segment<3>(3 * idx2) -= force;
+	forces.segment<3>(idx1) += force;
+	forces.segment<3>(idx2) -= force;
 }
 
 void Prog2_1Simulation::midpointStep()
@@ -477,16 +478,16 @@ void Prog2_1Simulation::applyBoundaryConditions()
 {
 	if(boundaryCondition == BoundaryCondition::SINGLE_CORNER)
 	{
-		positions.segment<3>(3 * getIndex(0, 0)) = Eigen::Vector3d(0.0, 0.0, 0.0);
-		velocities.segment<3>(3 * getIndex(0, 0)).setZero();
+		positions.segment<3>(getVectorIndex(0, 0)) = Eigen::Vector3d(0.0, 0.0, 0.0);
+		velocities.segment<3>(getVectorIndex(0, 0)).setZero();
 	}
 	else if(boundaryCondition == BoundaryCondition::BOTH_CORNERS)
 	{
-		positions.segment<3>(3 * getIndex(0, 0)) = Eigen::Vector3d(0.0, 0.0, 0.0);
-		velocities.segment<3>(3 * getIndex(0, 0)).setZero();
+		positions.segment<3>(getVectorIndex(0, 0)) = Eigen::Vector3d(0.0, 0.0, 0.0);
+		velocities.segment<3>(getVectorIndex(0, 0)).setZero();
 
-		positions.segment<3>(3 * getIndex(32, 0)) = Eigen::Vector3d(32 * dx, 0.0, 0.0);
-		velocities.segment<3>(3 * getIndex(32, 0)).setZero();
+		positions.segment<3>(getVectorIndex(32, 0)) = Eigen::Vector3d(32 * dx, 0.0, 0.0);
+		velocities.segment<3>(getVectorIndex(32, 0)).setZero();
 	}
 }
 
@@ -494,6 +495,16 @@ int Prog2_1Simulation::getIndex(int i, int j) const
 {
 	// von 2d index auf 1d index
 	return i * grid_size + j;
+}
+
+int Prog2_1Simulation::getVectorIndex(int i, int j) const
+{
+	return getIndex(i, j) * 3;  // Start-Index für x,y,z
+}
+
+int Prog2_1Simulation::getVectorIndex(int particle_idx) const
+{
+	return particle_idx * 3;  // Start-Index für x,y,z
 }
 
 void Prog2_1Simulation::reset(

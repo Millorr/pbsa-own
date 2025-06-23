@@ -24,18 +24,28 @@ public:
 
 	void mouseEvent(QMouseEvent * e) override;
 
+	enum class BoundaryCondition
+	{
+		SINGLE_CORNER,    // Nur (0,0) fixiert
+		BOTH_CORNERS      // (0,0) und (32,0) fixiert
+	};
+
 	Eigen::VectorXd step();
+
 	void reset(
 		double dt,
+		BoundaryCondition boundaryCondition,
 		double structKs, double structKd,
 		double sheerKs, double sheerKd,
 		double bendingKs, double bendingKd
 	);
 
+
 private:
 	double
-		cameraAzimuth = constants::pi<double>/4,
-		cameraElevation = constants::pi<double>/4;
+		cameraAzimuth = constants::pi<double> / 4,
+		cameraElevation = constants::pi<double> / 4;
+	double cameraDistance = 32.0; // Abstand der Kamera vom Ursprung
 
 	bool rotateInteraction = false;
 	bool firstStep = true;
@@ -69,35 +79,46 @@ private:
 	gl::Texture
 		gridTexture,
 		skyboxTexture;
-		
+
 
 	GLsizei numGridIndices = 0;
 
 	// Konstanten
 	static constexpr int grid_size = 33;
-	static constexpr double dx = 10.0;
+	static constexpr double dx = 0.10; // 10cm in m
+	static constexpr double g = 10.0;
+	static constexpr double m = 0.03;  // 30g in kg
 
 	// Simulation Parameters
 	double dt = 0.1;
 
-	double m = 0.03; // Masse der Knotenpunkte
 
 	struct spring
 	{
+		enum class Type
+		{
+			Structure, Sheer, Bending
+		};
+
 		double ks; // Federkonstante
 		double kd; // Dämpfungskonstante
+		Type type;
 
-		spring(double ks_ = 0.0, double kd_ = 0.0)
-			: ks(ks_), kd(kd_)
+		spring(double ks_ = 0.0, double kd_ = 0.0, Type t = Type::Structure)
+			: ks(ks_), kd(kd_), type(t)
 		{}
 	};
 
-	spring structurSpring = spring(0.1, 0.01); // Struktur-Federkonstante und Dämpfung
-	spring sheerSpring = spring(0.1, 0.01); // Scher-Federkonstante und Dämpfung
-	spring bendingSpring = spring(0.1, 0.01); // Biege-Federkonstante und Dämpfung
+	BoundaryCondition boundaryCondition = BoundaryCondition::SINGLE_CORNER;
+
+	spring structureSpring = spring(2000.0, 5.0, spring::Type::Structure); // Struktur-Federkonstante und Dämpfung
+	spring sheerSpring = spring(1000.0, 2.5, spring::Type::Sheer); // Scher-Federkonstante und Dämpfung
+	spring bendingSpring = spring(200.0, 1.0, spring::Type::Bending); // Biege-Federkonstante und Dämpfung
 
 	// Zustand
-	Eigen::VectorXd u;
+	Eigen::VectorXd positions;    // 3*N Einträge
+	Eigen::VectorXd velocities;   // 3*N Einträge
+
 
 	// Numerische Hilfsmittel
 	Eigen::SparseMatrix<double> system_matrix;  // (I - a*dt*L)
@@ -105,7 +126,14 @@ private:
 
 	// Hilfsfunktionen
 	int getIndex(int i, int j) const;
+	int getVectorIndex(int i, int j)const;
+	int getVectorIndex(int particle_idx) const;
+
 	void buildSystemMatrix();
 	void setInitialConditions();
-	Eigen::Vector3d calculateNormal(int i, int j) const;
+
+	void buildMesh();
+	void buildCloth();
+	void applyBoundaryConditions();
+	void setInitialPositions();
 };

@@ -22,6 +22,7 @@
 #include "Prog1_2Simulation.hpp"
 #include "Prog1_3Simulation.hpp"
 #include "Prog2_1Simulation.hpp"
+#include "Prog2_2Simulation.hpp"
 
 #ifdef _WIN32
 // always use (proper) hardware acceleration if available, since Intel's iGPUs have extremely buggy OpenGL support
@@ -506,6 +507,90 @@ void addEx2_1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 	auto dtSpin = new QDoubleSpinBox{};
 	dtSpin->setRange(0.0001, 100.0);
 	dtSpin->setDecimals(5);
+	dtSpin->setValue(0.001);
+	dtLayout->addWidget(dtLabel);
+	dtLayout->addWidget(dtSpin);
+	controlLayout->addLayout(dtLayout);
+
+
+	auto boundaryConditionLayout = new QHBoxLayout{};
+	auto boundaryConditionLabel = new QLabel{"Randbedingung"};
+	auto boundaryConditionCombo = new QComboBox{};
+	boundaryConditionCombo->addItem("Eine Ecke (0,0)", QVariant::fromValue(0));
+	boundaryConditionCombo->addItem("Zwei Ecken (0,0) und (32,0)", QVariant::fromValue(1));
+	boundaryConditionLayout->addWidget(boundaryConditionLabel);
+	boundaryConditionLayout->addWidget(boundaryConditionCombo);
+	controlLayout->addLayout(boundaryConditionLayout);
+
+
+	QDoubleSpinBox * structKs, * structKd;
+	auto structSpringBlock = createSpringBlock("Struktur-Feder", structKs, structKd, 100.0, 0.5);
+	controlLayout->addWidget(structSpringBlock);
+
+	QDoubleSpinBox * shearKs, * shearKd;
+	auto shearSpringBlock = createSpringBlock("Scher-Feder", shearKs, shearKd, 50.0, 0.25);
+	controlLayout->addWidget(shearSpringBlock);
+
+	QDoubleSpinBox * bendKs, * bendKd;
+	auto bendSpringBlock = createSpringBlock("Biege-Feder", bendKs, bendKd, 10.0, 0.05);
+	controlLayout->addWidget(bendSpringBlock);
+
+
+	// Reset-Button
+	auto resetButton = new QPushButton{"Reset"};
+	controlLayout->addWidget(resetButton);
+
+	auto glWidget = new QWidget{}; // Platzhalter
+	// -> Das tatsächliche Widget wird über das RendererFactory erstellt und dann hier gesetzt
+
+	mainLayout->addWidget(controlGroup);
+	mainLayout->addWidget(glWidget, 1);
+	QWidget::connect(tabWidget, &QTabWidget::currentChanged, [=] (int index) {
+		if(index != current)
+			return;
+
+		mainWindow->setRendererFactory(
+			[=] (QObject * parent) {
+			auto sim = new Prog2_1Simulation{};
+			sim->setParent(parent);
+
+			QObject::connect(resetButton, &QPushButton::clicked, [=] () {
+				sim->reset(
+					dtSpin->value(),
+					static_cast<Prog2_1Simulation::BoundaryCondition>(boundaryConditionCombo->currentData().value<int>()),
+					structKs->value(),
+					structKd->value(),
+					shearKs->value(),
+					shearKd->value(),
+					bendKs->value(),
+					bendKd->value()
+				);
+			});
+
+			return sim;
+		}
+		);
+	});
+
+}
+void addEx2_2Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
+{
+	auto current = tabWidget->count();
+	auto tab = new QWidget{tabWidget};
+	tabWidget->addTab(tab, "Exercise 2.2");
+
+	// Layouts
+	auto mainLayout = new QVBoxLayout{tab};
+	auto controlLayout = new QVBoxLayout{};
+	auto controlGroup = new QGroupBox{"Simulation Controls"};
+	controlGroup->setLayout(controlLayout);
+
+	// delta t (Zeitschritt)
+	auto dtLayout = new QHBoxLayout{};
+	auto dtLabel = new QLabel{"Δt (Zeitschritt)"};
+	auto dtSpin = new QDoubleSpinBox{};
+	dtSpin->setRange(0.0001, 100.0);
+	dtSpin->setDecimals(5);
 	dtSpin->setValue(0.1);
 	dtLayout->addWidget(dtLabel);
 	dtLayout->addWidget(dtSpin);
@@ -550,13 +635,13 @@ void addEx2_1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 
 		mainWindow->setRendererFactory(
 			[=] (QObject * parent) {
-			auto sim = new Prog2_1Simulation{};
+			auto sim = new Prog2_2Simulation{};
 			sim->setParent(parent);
 
 			QObject::connect(resetButton, &QPushButton::clicked, [=] () {
 				sim->reset(
 					dtSpin->value(),
-					static_cast<Prog2_1Simulation::BoundaryCondition>(boundaryConditionCombo->currentData().value<int>()),
+					static_cast<Prog2_2Simulation::BoundaryCondition>(boundaryConditionCombo->currentData().value<int>()),
 					structKs->value(),
 					structKd->value(),
 					shearKs->value(),
@@ -589,6 +674,7 @@ void addExercise2Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 
 	// Die bisherigen Exercise-Tabs als Unter-Tabs hinzufügen
 	addEx2_1Tab(mainWindow, subTabWidget);
+	addEx2_2Tab(mainWindow, subTabWidget);
 
 	subTabWidget->setCurrentIndex(0);
 
