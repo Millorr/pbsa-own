@@ -1,4 +1,4 @@
-#include "Prog2_1Simulation.hpp"
+#include "Prog2_2Simulation.hpp"
 
 #include "helpers.hpp"
 
@@ -8,10 +8,13 @@
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 
-Prog2_1Simulation::Prog2_1Simulation()
+Prog2_2Simulation::Prog2_2Simulation()
 	: OpenGLRenderer{nullptr}
 {
 
+	buildSystemMatrix();
+	this->solver.compute(this->system_matrix);
+	setInitialConditions();
 
 	{
 		// create/bind a vertex array object to store bindings to array and element buffers
@@ -28,21 +31,23 @@ Prog2_1Simulation::Prog2_1Simulation()
 				// Position
 				float x = -1.0f + 2.0f * j / (grid_size - 1);
 				float y = -1.0f + 2.0f * i / (grid_size - 1);
-				float z = 1.0f;
+				float z = u(getIndex(i,j));
 				vertices.push_back(x);
 				vertices.push_back(y);
 				vertices.push_back(z);
 
 				// Normals
-				Eigen::Vector3d normal = Eigen::Vector3d(0.0f, 0.0f, 1.0f);
+				Eigen::Vector3d normal = calculateNormal(i, j);
 
 				vertices.push_back(normal.x());
 				vertices.push_back(normal.y());  
 				vertices.push_back(normal.z());
 
-				float r = 0.5f;
+				// Farben (blau bis rot)
+				float value = std::clamp(static_cast<float>(u(getIndex(i, j))), 0.0f, 1.0f);
+				float r = value;
 				float g = 0.0f;
-				float b = 0.5f;
+				float b = 1.0f - value;
 				vertices.push_back(r);
 				vertices.push_back(g);
 				vertices.push_back(b);
@@ -189,10 +194,10 @@ Prog2_1Simulation::Prog2_1Simulation()
 	this->timer.start();
 }
 
-Prog2_1Simulation::~Prog2_1Simulation() = default;
+Prog2_2Simulation::~Prog2_2Simulation() = default;
 
 
-void Prog2_1Simulation::resize(int w, int h)
+void Prog2_2Simulation::resize(int w, int h)
 {
 	this->width = w;
 	this->height = h;
@@ -204,7 +209,7 @@ void Prog2_1Simulation::resize(int w, int h)
 	);
 }
 
-void Prog2_1Simulation::render()
+void Prog2_2Simulation::render()
 {
 	auto currentTimeNS = this->timer.nsecsElapsed();
 	auto deltaTimeNS = currentTimeNS - this->lastTimeNS;
@@ -257,33 +262,33 @@ void Prog2_1Simulation::render()
 		//qDebug() << "FPS: " << 1.0 / (deltaTimeNS / 1.0e09) << " simsteps: " << simSteps << " center: " << this->u(getIndex(grid_size/2, grid_size/2)) << " sum: " << this->u.sum();
 		//qDebug() << "Kamera: " << cameraAzimuth << " eli: " << cameraElevation;
 
-		//auto u_max = this->u.maxCoeff();
+		auto u_max = this->u.maxCoeff();
 
-		//for(int i = 0; i < grid_size; ++i)
-		//{
-		//	for(int j = 0; j < grid_size; ++j)
-		//	{
-		//		int idx = (i * grid_size + j) * 9 + 2; // Z-Komponente
-		//		// Aktualisiere die Z-Komponente der vertecies
-		//		vertices[idx] = u(getIndex(i, j));
+		for(int i = 0; i < grid_size; ++i)
+		{
+			for(int j = 0; j < grid_size; ++j)
+			{
+				int idx = (i * grid_size + j) * 9 + 2; // Z-Komponente
+				// Aktualisiere die Z-Komponente der vertecies
+				vertices[idx] = u(getIndex(i, j));
 
-		//		// Aktualisiere die Normalen
-		//		Eigen::Vector3d normal = calculateNormal(i, j);
+				// Aktualisiere die Normalen
+				Eigen::Vector3d normal = calculateNormal(i, j);
 
-		//		vertices[idx + 1] = normal.x();
-		//		vertices[idx + 2] = normal.y();
-		//		vertices[idx + 3] = normal.z();
+				vertices[idx + 1] = normal.x();
+				vertices[idx + 2] = normal.y();
+				vertices[idx + 3] = normal.z();
 
-		//		// Farbe neu berechnen (blau bis rot)
-		//		float value = std::clamp(static_cast<float>(u(getIndex(i, j)) / u_max), 0.0f, 1.0f);
-		//		float r = value;
-		//		float g = 0.0f;
-		//		float b = 1.0f - value;
-		//		vertices[idx + 4] = r;
-		//		vertices[idx + 5] = g;
-		//		vertices[idx + 6] = b;
-		//	}
-		//}
+				// Farbe neu berechnen (blau bis rot)
+				float value = std::clamp(static_cast<float>(u(getIndex(i, j)) / u_max), 0.0f, 1.0f);
+				float r = value;
+				float g = 0.0f;
+				float b = 1.0f - value;
+				vertices[idx + 4] = r;
+				vertices[idx + 5] = g;
+				vertices[idx + 6] = b;
+			}
+		}
 		glBindBuffer(GL_ARRAY_BUFFER, gridVertexBuffer.id());
 		glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * vertices.size(), vertices.data());
 
@@ -301,7 +306,7 @@ void Prog2_1Simulation::render()
 	this->update();
 }
 
-void Prog2_1Simulation::mouseEvent(QMouseEvent * e)
+void Prog2_2Simulation::mouseEvent(QMouseEvent * e)
 {
 	auto type = e->type();
 	auto pos = e->position();
@@ -343,40 +348,104 @@ void Prog2_1Simulation::mouseEvent(QMouseEvent * e)
 	}
 }
 
-Eigen::VectorXd Prog2_1Simulation::step()
+Eigen::VectorXd Prog2_2Simulation::step()
 {
-	return this->positions;
+	this->u = solver.solve(this->u);
+	return this->u;
 }
 
-int Prog2_1Simulation::getIndex(int i, int j) const
+int Prog2_2Simulation::getIndex(int i, int j) const
 {
 	// von 2d index auf 1d index
 	return i * grid_size + j;
 }
 
-void Prog2_1Simulation::reset(
+void Prog2_2Simulation::buildSystemMatrix()
+{
+	const int N = grid_size * grid_size;
+
+	// Beginne mit Identitätsmatrix I
+	// N * N Matrix, da wir GRID_SIZE x GRID_SIZE Knoten haben
+	// Und wir abbilden wollen wie viel Einfluss jeder Knoten auf jeden anderen hat
+	system_matrix = Eigen::SparseMatrix<double>(N, N);
+	system_matrix.setIdentity();
+
+	// Faktor für finite Differenzen: a*dt/dx²
+	const double factor = dt; // default: 0.0000001
+
+	// Durchlaufe alle Gitterpunkte
+	for(int i = 0; i < grid_size; i++)
+	{
+		for(int j = 0; j < grid_size; j++)
+		{
+			int idx = getIndex(i, j);
+
+			// Randbedingungen: u = 0 am gesamten Rand
+			if(i == 0 || i == grid_size - 1 || j == 0 || j == grid_size - 1)
+			{
+				// Für Randknoten: Matrix-Zeile bleibt [0...0 1 0...0]
+				// Das erzwingt u[idx] = 0 (Dirichlet-Randbedingung)
+				continue;
+			}
+
+
+			// (I - dt*a*L) * u_t+1 = u_t
+			// Hauptdiagonale: 1 + 4*factor (vom -4 im Laplace-Operator)
+            system_matrix.coeffRef(idx, idx) = 1.0 + 4.0 * factor;
+
+			// 5-Punkt-Stencil: Nachbarn mit -factor
+			// Refernce zu den Nachbarn setzen (-1, 0), (1, 0), (0, -1), (0, 1)
+			// 9 Punkte geht auch, aber weiß nicht so ganz, ob das richtig wäre, da es dann über dx von 1 hinaus gehen würde.
+			system_matrix.coeffRef(idx, getIndex(i - 1, j)) = -factor;  // Links
+			system_matrix.coeffRef(idx, getIndex(i + 1, j)) = -factor;  // Rechts
+			system_matrix.coeffRef(idx, getIndex(i, j - 1)) = -factor;  // Unten  
+			system_matrix.coeffRef(idx, getIndex(i, j + 1)) = -factor;  // Oben
+		}
+	}
+}
+
+void Prog2_2Simulation::setInitialConditions()
+{
+	this->u = Eigen::VectorXd(grid_size*grid_size);
+	this->u.setZero(); // Setze alle Knoten auf 0.0 (Anfangstemperatur)
+
+	int mid = grid_size / 2;
+	int centerIndex = getIndex(mid, mid);
+	// Setze den zentralen Knoten auf 1.0 (Anfangstemperatur)
+	this->u(centerIndex) = 1.0;
+}
+
+Eigen::Vector3d Prog2_2Simulation::calculateNormal(int i, int j) const
+{
+	// Randbehandlung: Normale nach oben
+	if(i <= 0 || i >= grid_size - 1 || j <= 0 || j >= grid_size - 1)
+		return Eigen::Vector3d(0, 0, 1);
+
+	// Zentrale Differenzen
+	float dzdx = static_cast<float>(u(getIndex(i, j + 1)) - u(getIndex(i, j - 1))) / (2.0f * dx);
+	float dzdy = static_cast<float>(u(getIndex(i + 1, j)) - u(getIndex(i - 1, j))) / (2.0f * dx);
+
+	// Normale: (-dz/dx, -dz/dy, 1)
+	Eigen::Vector3d n = {-dzdx, -dzdy, 1.0f};
+	n.normalize();
+	return n;
+}
+
+void Prog2_2Simulation::reset(
 	double dt0Param,
-	BoundaryCondition boundaryConditionParam,
 	double structKsParam, double structKdParam,
 	double sheerKsParam, double sheerKdParam,
 	double bendingKsParam, double bendingKdParam
 )
 {
 	this->dt = dt0Param;
-	this->boundaryCondition = boundaryConditionParam;
-	this->structurSpring = spring(structKsParam, structKdParam);
-	this->sheerSpring = spring(sheerKsParam, sheerKdParam);
-	this->bendingSpring = spring(bendingKsParam, bendingKdParam);
+
+	buildSystemMatrix();
+	this->solver.compute(this->system_matrix);
+	setInitialConditions();
 
 	qDebug() << "Reset simulation with parameters:"
-		<< "dt0:" << dt
-		<< "boundaryCondition:" << static_cast<int>(boundaryConditionParam)
-		<< "structKs:" << structKsParam
-		<< "structKd:" << structKdParam
-		<< "sheerKs:" << sheerKsParam
-		<< "sheerKd:" << sheerKdParam
-		<< "bendingKs:" << bendingKsParam
-		<< "bendingKd:" << bendingKdParam;
+		<< "dt0:" << dt;
 
 	this->lastTimeNS = this->timer.nsecsElapsed();
 	this->timer.restart();

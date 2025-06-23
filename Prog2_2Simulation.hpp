@@ -11,35 +11,26 @@
 #include <Eigen/LU>
 #include <Eigen/Sparse>
 
-class Prog2_1Simulation : public OpenGLRenderer
+class Prog2_2Simulation : public OpenGLRenderer
 {
 	Q_OBJECT
 
 public:
-	Prog2_1Simulation();
-	~Prog2_1Simulation();
+	Prog2_2Simulation();
+	~Prog2_2Simulation();
 
 	void resize(int w, int h) override;
 	void render() override;
 
 	void mouseEvent(QMouseEvent * e) override;
 
-	enum class BoundaryCondition
-	{
-		SINGLE_CORNER,    // Nur (0,0) fixiert
-		BOTH_CORNERS      // (0,0) und (32,0) fixiert
-	};
-
 	Eigen::VectorXd step();
-
 	void reset(
 		double dt,
-		BoundaryCondition boundaryCondition,
 		double structKs, double structKd,
 		double sheerKs, double sheerKd,
 		double bendingKs, double bendingKd
 	);
-
 
 private:
 	double
@@ -101,21 +92,20 @@ private:
 		{}
 	};
 
-	BoundaryCondition boundaryCondition = BoundaryCondition::SINGLE_CORNER;
-
 	spring structurSpring = spring(0.1, 0.01); // Struktur-Federkonstante und Dämpfung
 	spring sheerSpring = spring(0.1, 0.01); // Scher-Federkonstante und Dämpfung
 	spring bendingSpring = spring(0.1, 0.01); // Biege-Federkonstante und Dämpfung
 
 	// Zustand
-	Eigen::VectorXd positions;    // 3n Dimensionen (x,y,z für jeden Punkt)
-	Eigen::VectorXd velocities;   // 3n Dimensionen
-	Eigen::VectorXd forces;       // 3n Dimensionen
+	Eigen::VectorXd u;
+
+	// Numerische Hilfsmittel
+	Eigen::SparseMatrix<double> system_matrix;  // (I - a*dt*L)
+	Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver; // Recommended for very sparse and not too large problems (e.g., 2D Poisson eq.) (ref: https://eigen.tuxfamily.org/dox/group__TopicSparseSystems.html)
 
 	// Hilfsfunktionen
-	void computeForces();         // Berechnet alle Federkräfte
-	void midpointStep(double dt); // Ein RK2-Schritt
 	int getIndex(int i, int j) const;
 	void buildSystemMatrix();
 	void setInitialConditions();
+	Eigen::Vector3d calculateNormal(int i, int j) const;
 };

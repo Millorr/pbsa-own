@@ -392,88 +392,6 @@ void addEx1_3Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 	});
 
 }
-void addEx2_1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
-{
-	auto current = tabWidget->count();
-	auto tab = new QWidget{tabWidget};
-	tabWidget->addTab(tab, "Exercise 2.1");
-
-	// Layouts
-	auto mainLayout = new QVBoxLayout{tab};
-	auto controlLayout = new QVBoxLayout{};
-	auto controlGroup = new QGroupBox{"Simulation Controls"};
-	controlGroup->setLayout(controlLayout);
-
-	// scale 
-	auto scaleLayout = new QHBoxLayout{};
-	auto scaleLabel = new QLabel{"Scale"};
-	auto scaleSpin = new QDoubleSpinBox{};
-	scaleSpin->setRange(0.0001, 100.0);
-	scaleSpin->setDecimals(5);
-	scaleSpin->setValue(5.00);
-	scaleLayout->addWidget(scaleLabel);
-	scaleLayout->addWidget(scaleSpin);
-	controlLayout->addLayout(scaleLayout);
-
-	// a (Tempteraturleitfähigkeit)
-	auto aLayout = new QHBoxLayout{};
-	auto aLabel = new QLabel{"a (Tempteraturleitfähigkeit)"};
-	auto aSpin = new QDoubleSpinBox{};
-	aSpin->setRange(0.0001, 1.0);
-	aSpin->setDecimals(5);
-	aSpin->setValue(0.1);
-	aLayout->addWidget(aLabel);
-	aLayout->addWidget(aSpin);
-	controlLayout->addLayout(aLayout);
-
-	// delta t (Zeitschritt)
-	auto dtLayout = new QHBoxLayout{};
-	auto dtLabel = new QLabel{"Δt (Zeitschritt)"};
-	auto dtSpin = new QDoubleSpinBox{};
-	dtSpin->setRange(0.0001, 100.0);
-	dtSpin->setDecimals(5);
-	dtSpin->setValue(0.1);
-	dtLayout->addWidget(dtLabel);
-	dtLayout->addWidget(dtSpin);
-	controlLayout->addLayout(dtLayout);
-
-	// Reset-Button
-	auto resetButton = new QPushButton{"Reset"};
-	controlLayout->addWidget(resetButton);
-
-	auto glWidget = new QWidget{}; // Platzhalter
-	// -> Das tatsächliche Widget wird über das RendererFactory erstellt und dann hier gesetzt
-
-	mainLayout->addWidget(controlGroup);
-	mainLayout->addWidget(glWidget, 1);
-	QWidget::connect(tabWidget, &QTabWidget::currentChanged, [=] (int index) {
-		if(index != current)
-			return;
-
-		mainWindow->setRendererFactory(
-			[=] (QObject * parent) {
-			auto sim = new Prog2_1Simulation{};
-			sim->setParent(parent);
-
-			QObject::connect(resetButton, &QPushButton::clicked, [=] () {
-				sim->reset(
-					dtSpin->value(),
-					aSpin->value()
-				);
-			});
-
-			QObject::connect(scaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [=] (double scale) mutable {
-				sim->setTemperatureScale(
-					scale
-				);
-			});
-
-			return sim;
-		}
-		);
-	});
-
-}
 
 void addExercise1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 {
@@ -503,6 +421,123 @@ void addExercise1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 			emit subTabWidget->currentChanged(subTabWidget->currentIndex());
 		}
 	});
+}
+QWidget * createSpringBlock(const QString & springType, QDoubleSpinBox *& ksSpin, QDoubleSpinBox *& kdSpin)
+{
+	auto block = new QWidget;
+	auto layout = new QVBoxLayout{block};
+
+	// Feder-Art oben
+	auto typeLabel = new QLabel{springType};
+	layout->addWidget(typeLabel);
+
+	// ks und kd unten
+	auto paramsLayout = new QHBoxLayout{};
+	auto ksLabel = new QLabel{"ks:"};
+	ksSpin = new QDoubleSpinBox{};
+	ksSpin->setRange(-1000.0, 1000.0);
+	ksSpin->setDecimals(4);
+	ksSpin->setValue(0.1);
+
+	auto kdLabel = new QLabel{"kd:"};
+	kdSpin = new QDoubleSpinBox{};
+	kdSpin->setRange(-1000.0, 1000.0);
+	kdSpin->setDecimals(4);
+	kdSpin->setValue(0.01);
+
+	paramsLayout->addWidget(ksLabel);
+	paramsLayout->addWidget(ksSpin);
+	paramsLayout->addWidget(kdLabel);
+	paramsLayout->addWidget(kdSpin);
+
+	layout->addLayout(paramsLayout);
+
+	return block;
+}
+
+void addEx2_1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
+{
+	auto current = tabWidget->count();
+	auto tab = new QWidget{tabWidget};
+	tabWidget->addTab(tab, "Exercise 2.1");
+
+	// Layouts
+	auto mainLayout = new QVBoxLayout{tab};
+	auto controlLayout = new QVBoxLayout{};
+	auto controlGroup = new QGroupBox{"Simulation Controls"};
+	controlGroup->setLayout(controlLayout);
+
+	// delta t (Zeitschritt)
+	auto dtLayout = new QHBoxLayout{};
+	auto dtLabel = new QLabel{"Δt (Zeitschritt)"};
+	auto dtSpin = new QDoubleSpinBox{};
+	dtSpin->setRange(0.0001, 100.0);
+	dtSpin->setDecimals(5);
+	dtSpin->setValue(0.1);
+	dtLayout->addWidget(dtLabel);
+	dtLayout->addWidget(dtSpin);
+	controlLayout->addLayout(dtLayout);
+
+
+	auto boundaryConditionLayout = new QHBoxLayout{};
+	auto boundaryConditionLabel = new QLabel{"Randbedingung"};
+	auto boundaryConditionCombo = new QComboBox{};
+	boundaryConditionCombo->addItem("Eine Ecke (0,0)", QVariant::fromValue(0));
+	boundaryConditionCombo->addItem("Zwei Ecken (0,0) und (32,0)", QVariant::fromValue(1));
+	boundaryConditionLayout->addWidget(boundaryConditionLabel);
+	boundaryConditionLayout->addWidget(boundaryConditionCombo);
+	controlLayout->addLayout(boundaryConditionLayout);
+
+
+	QDoubleSpinBox * structKs, * structKd;
+	auto structSpringBlock = createSpringBlock("Struktur-Feder", structKs, structKd);
+	controlLayout->addWidget(structSpringBlock);
+
+	QDoubleSpinBox * shearKs, * shearKd;
+	auto shearSpringBlock = createSpringBlock("Scher-Feder", shearKs, shearKd);
+	controlLayout->addWidget(shearSpringBlock);
+
+	QDoubleSpinBox * bendKs, * bendKd;
+	auto bendSpringBlock = createSpringBlock("Biege-Feder", bendKs, bendKd);
+	controlLayout->addWidget(bendSpringBlock);
+
+
+	// Reset-Button
+	auto resetButton = new QPushButton{"Reset"};
+	controlLayout->addWidget(resetButton);
+
+	auto glWidget = new QWidget{}; // Platzhalter
+	// -> Das tatsächliche Widget wird über das RendererFactory erstellt und dann hier gesetzt
+
+	mainLayout->addWidget(controlGroup);
+	mainLayout->addWidget(glWidget, 1);
+	QWidget::connect(tabWidget, &QTabWidget::currentChanged, [=] (int index) {
+		if(index != current)
+			return;
+
+		mainWindow->setRendererFactory(
+			[=] (QObject * parent) {
+			auto sim = new Prog2_1Simulation{};
+			sim->setParent(parent);
+
+			QObject::connect(resetButton, &QPushButton::clicked, [=] () {
+				sim->reset(
+					dtSpin->value(),
+					static_cast<Prog2_1Simulation::BoundaryCondition>(boundaryConditionCombo->currentData().value<int>()),
+					structKs->value(),
+					structKd->value(),
+					shearKs->value(),
+					shearKd->value(),
+					bendKs->value(),
+					bendKd->value()
+				);
+			});
+
+			return sim;
+		}
+		);
+	});
+
 }
 
 void addExercise2Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
