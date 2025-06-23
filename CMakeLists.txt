@@ -122,6 +122,7 @@ target_sources(
     constants.hpp
     shaders/icosphere.vert shaders/icosphere.frag
 	shaders/lambertShader.vert shaders/lambertShader.frag
+	shaders/clothShader.vert shaders/clothShader.frag
     shaders/skybox.vert shaders/skybox.frag
     icon.qrc
     textures.qrc

@@ -17,52 +17,8 @@ Prog2_1Simulation::Prog2_1Simulation()
 		// create/bind a vertex array object to store bindings to array and element buffers
 		glBindVertexArray(this->gridVAO.id());
 
-		// sehr ineffizient, aber einfach zu verstehen
-		// build the required vertex and index arrays
-		vertices.clear();
-		indices.clear();
-		for(int i = 0; i < grid_size; ++i)
-		{
-			for(int j = 0; j < grid_size; ++j)
-			{
-				// Position
-				float x = -1.0f + 2.0f * j / (grid_size - 1);
-				float y = -1.0f + 2.0f * i / (grid_size - 1);
-				float z = 1.0f;
-				vertices.push_back(x);
-				vertices.push_back(y);
-				vertices.push_back(z);
-
-				// Normals
-				Eigen::Vector3d normal = Eigen::Vector3d(0.0f, 0.0f, 1.0f);
-
-				vertices.push_back(normal.x());
-				vertices.push_back(normal.y());  
-				vertices.push_back(normal.z());
-
-				float r = 0.5f;
-				float g = 0.0f;
-				float b = 0.5f;
-				vertices.push_back(r);
-				vertices.push_back(g);
-				vertices.push_back(b);
-			}
-		}
-		// Indices für zwei Dreiecke pro Zelle
-		for(int i = 0; i < grid_size - 1; ++i)
-		{
-			for(int j = 0; j < grid_size - 1; ++j)
-			{
-				int idx = i * grid_size + j;
-				indices.push_back(idx);
-				indices.push_back(idx + 1);
-				indices.push_back(idx + grid_size);
-
-				indices.push_back(idx + 1);
-				indices.push_back(idx + grid_size + 1);
-				indices.push_back(idx + grid_size);
-			}
-		}
+		buildMesh();
+		buildCloth();
 
 		// create/bind an array buffer object and fill it with the vertices we computed (GL_DYNAMIC_DRAW, as it needs to be modified)
 		glBindBuffer(GL_ARRAY_BUFFER, this->gridVertexBuffer.id());
@@ -70,20 +26,12 @@ Prog2_1Simulation::Prog2_1Simulation()
 
 
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->gridIndexBuffer.id());
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_DYNAMIC_DRAW);
 
 
 		// Vertex Attribute für Position
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void *)0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
 		glEnableVertexAttribArray(0);
-
-		// Vertex Attribute für Normalen
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void *)(3 * sizeof(float)));
-		glEnableVertexAttribArray(1);
-
-		// Vertex Attribute für Farbe
-		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void *)(6 * sizeof(float)));
-		glEnableVertexAttribArray(2);
 
 		// unbind the vertex array object as we are done modifying it
 		glBindVertexArray(0);
@@ -100,11 +48,11 @@ Prog2_1Simulation::Prog2_1Simulation()
 		std::vector<char> text;
 
 		// load and compile vertex shader
-		text = loadResource("shaders/lambertShader.vert");
+		text = loadResource("shaders/clothShader.vert");
 		vertexShader.compile(text.data(), static_cast<GLint>(text.size()));
 
 		// load and compile fragment shader
-		text = loadResource("shaders/lambertShader.frag");
+		text = loadResource("shaders/clothShader.frag");
 		fragmentShader.compile(text.data(), static_cast<GLint>(text.size()));
 
 		// link shader program and check for errors. shader objects are no longer required
@@ -116,8 +64,6 @@ Prog2_1Simulation::Prog2_1Simulation()
 
 		// set which vertex attribute index is bound to position
 		glBindAttribLocation(this->gridProgram.id(), 0, "position");
-		glBindAttribLocation(this->gridProgram.id(), 1, "normal");
-		glBindAttribLocation(this->gridProgram.id(), 2, "color");
 	}
 
 	{
@@ -181,7 +127,7 @@ Prog2_1Simulation::Prog2_1Simulation()
 	glDepthFunc(GL_LESS);
 	glClearDepth(1.);
 
-	glEnable(GL_CULL_FACE);
+	glDisable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
 	glFrontFace(GL_CCW);
 
@@ -191,6 +137,69 @@ Prog2_1Simulation::Prog2_1Simulation()
 
 Prog2_1Simulation::~Prog2_1Simulation() = default;
 
+
+void Prog2_1Simulation::buildMesh()
+{
+	// sehr ineffizient, aber einfach zu verstehen
+		// build the required vertex and index arrays
+	vertices.clear();
+	indices.clear();
+
+	for(int i = 0; i < grid_size; ++i)
+	{
+		for(int j = 0; j < grid_size; ++j)
+		{
+			// Position
+			float x = dx * j -dx * (grid_size - 1) / 2;
+			float y = dx * i -dx * (grid_size - 1) / 2;
+			float z = 0.0f;
+			vertices.push_back(x);
+			vertices.push_back(y);
+			vertices.push_back(z);
+		}
+	}
+	// Indices für zwei Dreiecke pro Zelle
+	for(int i = 0; i < grid_size - 1; ++i)
+	{
+		for(int j = 0; j < grid_size - 1; ++j)
+		{
+			int idx = i * grid_size + j;
+			indices.push_back(idx);
+			indices.push_back(idx + 1);
+			indices.push_back(idx + grid_size);
+
+			indices.push_back(idx + 1);
+			indices.push_back(idx + grid_size + 1);
+			indices.push_back(idx + grid_size);
+		}
+	}
+}
+
+void Prog2_1Simulation::buildCloth()
+{
+
+	// Vektoren initialisieren
+	positions.resize(3 * grid_size * grid_size);
+	velocities.resize(3 * grid_size * grid_size);
+	forces.resize(3 * grid_size * grid_size);
+
+	velocities.setZero();  // Alle Geschwindigkeiten auf 0
+	forces.setZero();  // Alle Kräfte auf 0
+
+	// Anfangspositionen setzen (undeformiert, parallel zum Boden)
+	for(int i = 0; i < grid_size; ++i)
+	{
+		for(int j = 0; j < grid_size; ++j)
+		{
+			int idx = getIndex(i, j);
+
+			// Position in Metern
+			positions[3 * idx + 0] = i * dx;
+			positions[3 * idx + 1] = j * dx;
+			positions[3 * idx + 2] = 0.0f;
+		}
+	}
+}
 
 void Prog2_1Simulation::resize(int w, int h)
 {
@@ -224,7 +233,7 @@ void Prog2_1Simulation::render()
 		auto ca = std::cos(this->cameraAzimuth);
 		auto se = std::sin(this->cameraElevation);
 		auto ce = std::cos(this->cameraElevation);
-		auto distance = 4.;
+		auto distance = this->cameraDistance;
 		this->viewMatrix = calculateLookAtMatrix(
 			distance * Eigen::Vector3d{se * ca, se * sa, ce},
 			{0, 0, 0},
@@ -259,31 +268,17 @@ void Prog2_1Simulation::render()
 
 		//auto u_max = this->u.maxCoeff();
 
-		//for(int i = 0; i < grid_size; ++i)
-		//{
-		//	for(int j = 0; j < grid_size; ++j)
-		//	{
-		//		int idx = (i * grid_size + j) * 9 + 2; // Z-Komponente
-		//		// Aktualisiere die Z-Komponente der vertecies
-		//		vertices[idx] = u(getIndex(i, j));
+		for(int i = 0; i < grid_size; ++i)
+		{
+			for(int j = 0; j < grid_size; ++j)
+			{
+				int idx = getIndex(i, j) * 3;
 
-		//		// Aktualisiere die Normalen
-		//		Eigen::Vector3d normal = calculateNormal(i, j);
-
-		//		vertices[idx + 1] = normal.x();
-		//		vertices[idx + 2] = normal.y();
-		//		vertices[idx + 3] = normal.z();
-
-		//		// Farbe neu berechnen (blau bis rot)
-		//		float value = std::clamp(static_cast<float>(u(getIndex(i, j)) / u_max), 0.0f, 1.0f);
-		//		float r = value;
-		//		float g = 0.0f;
-		//		float b = 1.0f - value;
-		//		vertices[idx + 4] = r;
-		//		vertices[idx + 5] = g;
-		//		vertices[idx + 6] = b;
-		//	}
-		//}
+				vertices[idx]		= positions[3 * getIndex(i, j)];
+				vertices[idx + 1]	= positions[3 * getIndex(i, j) + 1];
+				vertices[idx + 2]	= positions[3 * getIndex(i, j) + 2];
+			}
+		}
 		glBindBuffer(GL_ARRAY_BUFFER, gridVertexBuffer.id());
 		glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * vertices.size(), vertices.data());
 
@@ -345,7 +340,154 @@ void Prog2_1Simulation::mouseEvent(QMouseEvent * e)
 
 Eigen::VectorXd Prog2_1Simulation::step()
 {
-	return this->positions;
+	if(firstStep)
+	{
+		lastTimeNS = timer.nsecsElapsed();
+		firstStep = false;
+		return positions;  // Ersten Frame überspringen
+	}
+
+	midpointStep();
+	applyBoundaryConditions();
+
+	return positions;
+}
+
+void Prog2_1Simulation::computeForces()
+{
+	forces.setZero();  // Alle Kräfte zurücksetzen
+
+	// Gravitationskraft für alle Punkte
+	for(int i = 0; i < grid_size * grid_size; ++i)
+	{
+		forces[3 * i + 2] -= m * g;
+	}
+
+	// Federkräfte berechnen
+	for(int i = 0; i < grid_size; ++i)
+	{
+		for(int j = 0; j < grid_size; ++j)
+		{
+			int idx = getIndex(i, j);
+
+			// Strukturfedern (horizontal und vertikal)
+			addSpringForce(i, j, i + 1, j, structureSpring);     // Rechts
+			addSpringForce(i, j, i, j + 1, structureSpring);     // Oben
+
+			// Scherfedern (diagonal)
+			addSpringForce(i, j, i + 1, j + 1, sheerSpring);       // Diagonal rechts-oben
+			addSpringForce(i, j, i + 1, j - 1, sheerSpring);       // Diagonal rechts-unten
+
+			// Biegefedern (2er-Abstand)
+			addSpringForce(i, j, i + 2, j, bendingSpring);       // 2 nach rechts
+			addSpringForce(i, j, i, j + 2, bendingSpring);       // 2 nach oben
+		}
+	}
+}
+
+void Prog2_1Simulation::addSpringForce(int i1, int j1, int i2, int j2, const spring & spr)
+{
+	// Grenzen prüfen
+	if(i2 < 0 || i2 >= grid_size || j2 < 0 || j2 >= grid_size)
+	{
+		return;
+	}
+
+	int idx1 = getIndex(i1, j1);
+	int idx2 = getIndex(i2, j2);
+
+	// Positionen und Geschwindigkeiten extrahieren
+	Eigen::Vector3d pos1 = positions.segment<3>(3 * idx1);
+	Eigen::Vector3d pos2 = positions.segment<3>(3 * idx2);
+	Eigen::Vector3d vel1 = velocities.segment<3>(3 * idx1);
+	Eigen::Vector3d vel2 = velocities.segment<3>(3 * idx2);
+
+	// Relative Vektoren
+	Eigen::Vector3d x_ij = pos2 - pos1;
+	Eigen::Vector3d v_ij = vel2 - vel1;
+
+	double length = x_ij.norm();
+	if(length < 1e-12) return;  // Schutz vor Division durch 0
+
+	Eigen::Vector3d x_ij_hat = x_ij / length;
+
+	// Ruhelänge der Feder
+	double rest_length = 0.0;
+	if(spr.type == spring::Type::Structure)
+	{
+		rest_length = dx;  // Strukturfedern haben eine Ruhelänge von dx
+	}
+	else if(spr.type == spring::Type::Sheer)
+	{
+		rest_length = dx * sqrt(2.0); // Scherfedern haben eine Ruhelänge von dx * sqrt(2)
+	}
+	else if(spr.type == spring::Type::Bending)
+	{
+		rest_length = 2.0 * dx; // Biegefedern haben eine Ruhelänge von 2 * dx
+	}
+
+	// Federkraft berechnen (Gleichung 2 aus der Aufgabe)
+	double spring_force_magnitude = spr.ks * (length - rest_length);
+	double damping_force_magnitude = spr.kd * v_ij.dot(x_ij_hat);
+
+	double total_force_magnitude = spring_force_magnitude + damping_force_magnitude;
+
+	Eigen::Vector3d force = total_force_magnitude * x_ij_hat;
+
+	// Kräfte auf beide Punkte anwenden (Newton's 3. Gesetz)
+	forces.segment<3>(3 * idx1) += force;
+	forces.segment<3>(3 * idx2) -= force;
+}
+
+void Prog2_1Simulation::midpointStep()
+{
+	// k1 = f(t, q) berechnen
+	computeForces();
+
+	Eigen::VectorXd k1_vel = forces / m;  // a = F/m
+	Eigen::VectorXd k1_pos = velocities;
+
+	// Zwischenschritt: q + dt/2 * k1
+	Eigen::VectorXd temp_positions = positions + 0.5 * dt * k1_pos;
+	Eigen::VectorXd temp_velocities = velocities + 0.5 * dt * k1_vel;
+
+	// Temporären Zustand setzen
+	Eigen::VectorXd original_positions = positions;
+	Eigen::VectorXd original_velocities = velocities;
+
+	positions = temp_positions;
+	velocities = temp_velocities;
+
+	// k2 = f(t + dt/2, q + dt/2 * k1) berechnen
+	computeForces();
+
+	Eigen::VectorXd k2_vel = forces / m;
+	Eigen::VectorXd k2_pos = temp_velocities;
+
+	// Originalen Zustand wiederherstellen
+	positions = original_positions;
+	velocities = original_velocities;
+
+	// Finales Update mit k2
+	velocities += dt * k2_vel;
+	positions += dt * k2_pos;
+}
+
+void Prog2_1Simulation::applyBoundaryConditions()
+{
+	if(boundaryCondition == BoundaryCondition::SINGLE_CORNER)
+	{
+		positions.segment<3>(3 * getIndex(0, 0)) = Eigen::Vector3d(0.0, 0.0, 0.0);
+		velocities.segment<3>(3 * getIndex(0, 0)).setZero();
+	}
+	else if(boundaryCondition == BoundaryCondition::BOTH_CORNERS)
+	{
+		positions.segment<3>(3 * getIndex(0, 0)) = Eigen::Vector3d(0.0, 0.0, 0.0);
+		velocities.segment<3>(3 * getIndex(0, 0)).setZero();
+
+		positions.segment<3>(3 * getIndex(32, 0)) = Eigen::Vector3d(32 * dx, 0.0, 0.0);
+		velocities.segment<3>(3 * getIndex(32, 0)).setZero();
+	}
 }
 
 int Prog2_1Simulation::getIndex(int i, int j) const
@@ -364,7 +506,7 @@ void Prog2_1Simulation::reset(
 {
 	this->dt = dt0Param;
 	this->boundaryCondition = boundaryConditionParam;
-	this->structurSpring = spring(structKsParam, structKdParam);
+	this->structureSpring = spring(structKsParam, structKdParam);
 	this->sheerSpring = spring(sheerKsParam, sheerKdParam);
 	this->bendingSpring = spring(bendingKsParam, bendingKdParam);
 
@@ -377,6 +519,9 @@ void Prog2_1Simulation::reset(
 		<< "sheerKd:" << sheerKdParam
 		<< "bendingKs:" << bendingKsParam
 		<< "bendingKd:" << bendingKdParam;
+
+
+	buildCloth();
 
 	this->lastTimeNS = this->timer.nsecsElapsed();
 	this->timer.restart();

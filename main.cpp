@@ -422,6 +422,7 @@ void addExercise1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 		}
 	});
 }
+
 QWidget * createSpringBlock(const QString & springType, QDoubleSpinBox *& ksSpin, QDoubleSpinBox *& kdSpin)
 {
 	auto block = new QWidget;
@@ -437,13 +438,45 @@ QWidget * createSpringBlock(const QString & springType, QDoubleSpinBox *& ksSpin
 	ksSpin = new QDoubleSpinBox{};
 	ksSpin->setRange(-1000.0, 1000.0);
 	ksSpin->setDecimals(4);
-	ksSpin->setValue(0.1);
+	ksSpin->setValue(10.0);
 
 	auto kdLabel = new QLabel{"kd:"};
 	kdSpin = new QDoubleSpinBox{};
 	kdSpin->setRange(-1000.0, 1000.0);
 	kdSpin->setDecimals(4);
-	kdSpin->setValue(0.01);
+	kdSpin->setValue(0.1);
+
+	paramsLayout->addWidget(ksLabel);
+	paramsLayout->addWidget(ksSpin);
+	paramsLayout->addWidget(kdLabel);
+	paramsLayout->addWidget(kdSpin);
+
+	layout->addLayout(paramsLayout);
+
+	return block;
+}
+QWidget * createSpringBlock(const QString & springType, QDoubleSpinBox *& ksSpin, QDoubleSpinBox *& kdSpin, double ks, double kd)
+{
+	auto block = new QWidget;
+	auto layout = new QVBoxLayout{block};
+
+	// Feder-Art oben
+	auto typeLabel = new QLabel{springType};
+	layout->addWidget(typeLabel);
+
+	// ks und kd unten
+	auto paramsLayout = new QHBoxLayout{};
+	auto ksLabel = new QLabel{"ks:"};
+	ksSpin = new QDoubleSpinBox{};
+	ksSpin->setRange(0.0, 10000.0);
+	ksSpin->setDecimals(4);
+	ksSpin->setValue(ks);
+
+	auto kdLabel = new QLabel{"kd:"};
+	kdSpin = new QDoubleSpinBox{};
+	kdSpin->setRange(0.0, 1000.0);
+	kdSpin->setDecimals(4);
+	kdSpin->setValue(kd);
 
 	paramsLayout->addWidget(ksLabel);
 	paramsLayout->addWidget(ksSpin);
@@ -490,15 +523,15 @@ void addEx2_1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 
 
 	QDoubleSpinBox * structKs, * structKd;
-	auto structSpringBlock = createSpringBlock("Struktur-Feder", structKs, structKd);
+	auto structSpringBlock = createSpringBlock("Struktur-Feder", structKs, structKd, 2000.0, 5.0);
 	controlLayout->addWidget(structSpringBlock);
 
 	QDoubleSpinBox * shearKs, * shearKd;
-	auto shearSpringBlock = createSpringBlock("Scher-Feder", shearKs, shearKd);
+	auto shearSpringBlock = createSpringBlock("Scher-Feder", shearKs, shearKd, 1000.0, 2.5);
 	controlLayout->addWidget(shearSpringBlock);
 
 	QDoubleSpinBox * bendKs, * bendKd;
-	auto bendSpringBlock = createSpringBlock("Biege-Feder", bendKs, bendKd);
+	auto bendSpringBlock = createSpringBlock("Biege-Feder", bendKs, bendKd, 200.0, 1.0);
 	controlLayout->addWidget(bendSpringBlock);
 
 
