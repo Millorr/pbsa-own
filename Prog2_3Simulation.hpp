@@ -11,13 +11,13 @@
 #include <Eigen/LU>
 #include <Eigen/Sparse>
 
-class Prog2_2Simulation : public OpenGLRenderer
+class Prog2_3Simulation : public OpenGLRenderer
 {
 	Q_OBJECT
 
 public:
-	Prog2_2Simulation();
-	~Prog2_2Simulation();
+	Prog2_3Simulation();
+	~Prog2_3Simulation();
 
 	void resize(int w, int h) override;
 	void render() override;
@@ -40,18 +40,20 @@ public:
 		BoundaryCondition boundaryCondition,
 		double structKs, double structKd,
 		double sheerKs, double sheerKd,
-		double bendingKs, double bendingKd
+		double bendingKs, double bendingKd,
+		int maxSimSteps
 	);
 
 
 private:
 	double
-		cameraAzimuth = constants::pi<double> / 4,
-		cameraElevation = constants::pi<double> / 4;
-	double cameraDistance = 32.0; // Abstand der Kamera vom Ursprung
+		cameraAzimuth = constants::pi<double>/4,
+		cameraElevation = constants::pi<double>/4;
+	double cameraDistance = grid_size * dx; // Abstand der Kamera vom Ursprung
 
 	bool rotateInteraction = false;
 	bool firstStep = true;
+	qint64 maxSimSteps = 10;
 
 	std::vector<float> vertices;
 	std::vector<unsigned> indices;
@@ -82,7 +84,7 @@ private:
 	gl::Texture
 		gridTexture,
 		skyboxTexture;
-
+		
 
 	GLsizei numGridIndices = 0;
 
@@ -93,7 +95,7 @@ private:
 	static constexpr double m = 0.03;  // 30g in kg
 
 	// Simulation Parameters
-	double dt = 0.1;
+	double dt = 0.001;
 
 
 	struct spring
@@ -114,29 +116,23 @@ private:
 
 	BoundaryCondition boundaryCondition = BoundaryCondition::SINGLE_CORNER;
 
-	spring structureSpring = spring(2000.0, 5.0, spring::Type::Structure); // Struktur-Federkonstante und Dämpfung
-	spring sheerSpring = spring(1000.0, 2.5, spring::Type::Sheer); // Scher-Federkonstante und Dämpfung
-	spring bendingSpring = spring(200.0, 1.0, spring::Type::Bending); // Biege-Federkonstante und Dämpfung
+	spring structureSpring = spring(100.0, 0.5, spring::Type::Structure); // Struktur-Federkonstante und Dämpfung
+	spring sheerSpring = spring(50.0, 0.25, spring::Type::Sheer); // Scher-Federkonstante und Dämpfung
+	spring bendingSpring = spring(10.0, 0.05, spring::Type::Bending); // Biege-Federkonstante und Dämpfung
 
 	// Zustand
-	Eigen::VectorXd positions;    // 3*N Einträge
-	Eigen::VectorXd velocities;   // 3*N Einträge
-
-
-	// Numerische Hilfsmittel
-	Eigen::SparseMatrix<double> system_matrix;  // (I - a*dt*L)
-	Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver; // Recommended for very sparse and not too large problems (e.g., 2D Poisson eq.) (ref: https://eigen.tuxfamily.org/dox/group__TopicSparseSystems.html)
+	Eigen::VectorXd positions;    // 3n Dimensionen (x,y,z für jeden Punkt)
+	Eigen::VectorXd velocities;   // 3n Dimensionen
+	Eigen::VectorXd forces;       // 3n Dimensionen
 
 	// Hilfsfunktionen
+	void computeForces();         // Berechnet alle Federkräfte
+	void addSpringForce(int i1, int j1, int i2, int j2, const spring & spr);
+	void midpointStep(); // Ein RK2-Schritt
 	int getIndex(int i, int j) const;
 	int getVectorIndex(int i, int j)const;
 	int getVectorIndex(int particle_idx) const;
-
-	void buildSystemMatrix();
-	void setInitialConditions();
-
 	void buildMesh();
 	void buildCloth();
 	void applyBoundaryConditions();
-	void setInitialPositions();
 };

@@ -1,4 +1,4 @@
-#include "Prog2_2Simulation.hpp"
+#include "Prog2_3Simulation.hpp"
 
 #include "helpers.hpp"
 
@@ -8,7 +8,7 @@
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 
-Prog2_2Simulation::Prog2_2Simulation()
+Prog2_3Simulation::Prog2_3Simulation()
 	: OpenGLRenderer{nullptr}
 {
 
@@ -135,10 +135,10 @@ Prog2_2Simulation::Prog2_2Simulation()
 	this->timer.start();
 }
 
-Prog2_2Simulation::~Prog2_2Simulation() = default;
+Prog2_3Simulation::~Prog2_3Simulation() = default;
 
 
-void Prog2_2Simulation::buildMesh()
+void Prog2_3Simulation::buildMesh()
 {
 	// sehr ineffizient, aber einfach zu verstehen
 		// build the required vertex and index arrays
@@ -150,8 +150,8 @@ void Prog2_2Simulation::buildMesh()
 		for(int j = 0; j < grid_size; ++j)
 		{
 			// Position
-			float x = dx * j - dx * (grid_size - 1) / 2;
-			float y = dx * i - dx * (grid_size - 1) / 2;
+			float x = dx * j -dx * (grid_size - 1) / 2;
+			float y = dx * i -dx * (grid_size - 1) / 2;
 			float z = 0.0f;
 			vertices.push_back(x);
 			vertices.push_back(y);
@@ -175,14 +175,16 @@ void Prog2_2Simulation::buildMesh()
 	}
 }
 
-void Prog2_2Simulation::buildCloth()
+void Prog2_3Simulation::buildCloth()
 {
-
 	// Vektoren initialisieren
 	positions.resize(3 * grid_size * grid_size);
 	velocities.resize(3 * grid_size * grid_size);
+	forces.resize(3 * grid_size * grid_size);
 
-	velocities.setZero();  // Alle Geschwindigkeiten auf 0
+	velocities.setZero();
+	forces.setZero();
+
 
 	// Anfangspositionen setzen (undeformiert, parallel zum Boden)
 	for(int i = 0; i < grid_size; ++i)
@@ -199,7 +201,7 @@ void Prog2_2Simulation::buildCloth()
 	}
 }
 
-void Prog2_2Simulation::resize(int w, int h)
+void Prog2_3Simulation::resize(int w, int h)
 {
 	this->width = w;
 	this->height = h;
@@ -211,14 +213,14 @@ void Prog2_2Simulation::resize(int w, int h)
 	);
 }
 
-void Prog2_2Simulation::render()
+void Prog2_3Simulation::render()
 {
 	auto currentTimeNS = this->timer.nsecsElapsed();
 	auto deltaTimeNS = currentTimeNS - this->lastTimeNS;
 	this->lastTimeNS = currentTimeNS;
 	qint64 simSteps = (currentTimeNS / this->dt / 1e9) - this->lastSimSteps;
 	this->lastSimSteps += simSteps;
-
+	simSteps = std::min(simSteps, maxSimSteps);
 	int loc = -1;
 
 	// clear color and depth buffer to black
@@ -261,7 +263,7 @@ void Prog2_2Simulation::render()
 		{
 			this->step();
 		}
-		//qDebug() << "FPS: " << 1.0 / (deltaTimeNS / 1.0e09) << " simsteps: " << simSteps << " center: " << this->u(getIndex(grid_size/2, grid_size/2)) << " sum: " << this->u.sum();
+		//qDebug() << "FPS: " << 1.0 / (deltaTimeNS / 1.0e09) << " simsteps: " << simSteps;
 		//qDebug() << "Kamera: " << cameraAzimuth << " eli: " << cameraElevation;
 
 		//auto u_max = this->u.maxCoeff();
@@ -294,7 +296,7 @@ void Prog2_2Simulation::render()
 	this->update();
 }
 
-void Prog2_2Simulation::mouseEvent(QMouseEvent * e)
+void Prog2_3Simulation::mouseEvent(QMouseEvent * e)
 {
 	auto type = e->type();
 	auto pos = e->position();
@@ -336,7 +338,7 @@ void Prog2_2Simulation::mouseEvent(QMouseEvent * e)
 	}
 }
 
-Eigen::VectorXd Prog2_2Simulation::step()
+Eigen::VectorXd Prog2_3Simulation::step()
 {
 	if(firstStep)
 	{
@@ -345,14 +347,134 @@ Eigen::VectorXd Prog2_2Simulation::step()
 		return positions;  // Ersten Frame überspringen
 	}
 
-	// do stuff
+	midpointStep();
 	applyBoundaryConditions();
 
 	return positions;
 }
 
+void Prog2_3Simulation::computeForces()
+{
+	forces.setZero();  // Alle Kräfte zurücksetzen
 
-void Prog2_2Simulation::applyBoundaryConditions()
+	// Gravitationskraft für alle Punkte
+	for(int i = 0; i < grid_size * grid_size; ++i)
+	{
+		forces[3 * i + 2] -= m * g;
+	}
+
+	// Federkräfte berechnen
+	for(int i = 0; i < grid_size; ++i)
+	{
+		for(int j = 0; j < grid_size; ++j)
+		{
+			int idx = getIndex(i, j);
+
+			// Strukturfedern (horizontal und vertikal)
+			addSpringForce(i, j, i + 1, j, structureSpring);     // oben
+			addSpringForce(i, j, i, j + 1, structureSpring);     // rechts
+
+			// Scherfedern (diagonal)
+			addSpringForce(i, j, i + 1, j + 1, sheerSpring);       // Diagonal rechts-oben
+			addSpringForce(i, j, i + 1, j - 1, sheerSpring);       // Diagonal links-oben
+
+			// Biegefedern (2er-Abstand)
+			addSpringForce(i, j, i + 2, j, bendingSpring);       // 2 nach oben
+			addSpringForce(i, j, i, j + 2, bendingSpring);       // 2 nach rechts
+		}
+	}
+}
+
+void Prog2_3Simulation::addSpringForce(int i1, int j1, int i2, int j2, const spring & spr)
+{
+	// Grenzen prüfen
+	if(i2 < 0 || i2 >= grid_size || j2 < 0 || j2 >= grid_size)
+	{
+		return;
+	}
+
+	int idx1 = getVectorIndex(i1, j1);
+	int idx2 = getVectorIndex(i2, j2);
+
+	// Positionen und Geschwindigkeiten extrahieren
+	Eigen::Vector3d pos1 = positions.segment<3>(idx1);
+	Eigen::Vector3d pos2 = positions.segment<3>(idx2);
+	Eigen::Vector3d vel1 = velocities.segment<3>(idx1);
+	Eigen::Vector3d vel2 = velocities.segment<3>(idx2);
+
+	// Relative Vektoren
+	Eigen::Vector3d x_ij = pos2 - pos1;
+	Eigen::Vector3d v_ij = vel2 - vel1;
+
+	double x_ij_norm = x_ij.norm();
+
+	if(x_ij_norm < 1e-12) return;  // Schutz vor Division durch 0
+
+	Eigen::Vector3d x_ij_hat = x_ij / x_ij_norm;
+
+	// Ruhelänge der Feder
+	double rest_length = dx;
+	if(spr.type == spring::Type::Structure)
+	{
+		rest_length = dx;  // Strukturfedern haben eine Ruhelänge von dx
+	}
+	else if(spr.type == spring::Type::Sheer)
+	{
+		rest_length = dx * sqrt(2.0); // Scherfedern haben eine Ruhelänge von dx * sqrt(2)
+	}
+	else if(spr.type == spring::Type::Bending)
+	{
+		rest_length = 2.0 * dx; // Biegefedern haben eine Ruhelänge von 2 * dx
+	}
+
+	// Federkraft berechnen (Gleichung 2 aus der Aufgabe)
+	double spring_force_magnitude = spr.ks * (x_ij_norm - rest_length);
+	double damping_force_magnitude = spr.kd * v_ij.dot(x_ij_hat);
+
+	double total_force_magnitude = spring_force_magnitude + damping_force_magnitude;
+
+	Eigen::Vector3d force = total_force_magnitude * x_ij_hat;
+
+	// Kräfte auf beide Punkte anwenden (Newton's 3. Gesetz)
+	forces.segment<3>(idx1) += force;
+	forces.segment<3>(idx2) -= force;
+}
+
+void Prog2_3Simulation::midpointStep()
+{
+	// k1 = f(t, q) berechnen
+	computeForces();
+
+	Eigen::VectorXd k1_vel = forces / m;  // a = F/m
+	Eigen::VectorXd k1_pos = velocities;
+
+	// Zwischenschritt: q + dt/2 * k1
+	Eigen::VectorXd temp_positions = positions + 0.5 * dt * k1_pos;
+	Eigen::VectorXd temp_velocities = velocities + 0.5 * dt * k1_vel;
+
+	// Temporären Zustand setzen
+	Eigen::VectorXd original_positions = positions;
+	Eigen::VectorXd original_velocities = velocities;
+
+	positions = temp_positions;
+	velocities = temp_velocities;
+
+	// k2 = f(t + dt/2, q + dt/2 * k1) berechnen
+	computeForces();
+
+	Eigen::VectorXd k2_vel = forces / m;
+	Eigen::VectorXd k2_pos = temp_velocities;
+
+	// Originalen Zustand wiederherstellen
+	positions = original_positions;
+	velocities = original_velocities;
+
+	// Finales Update mit k2
+	velocities += dt * k2_vel;
+	positions += dt * k2_pos;
+}
+
+void Prog2_3Simulation::applyBoundaryConditions()
 {
 	// Anfangs Ecke (0,0) immer fixieren
 	positions.segment<3>(getVectorIndex(0, 0)) = Eigen::Vector3d(0.0, 0.0, 0.0);
@@ -380,30 +502,29 @@ void Prog2_2Simulation::applyBoundaryConditions()
 	}
 }
 
-int Prog2_2Simulation::getIndex(int i, int j) const
+int Prog2_3Simulation::getIndex(int i, int j) const
 {
 	// von 2d index auf 1d index
 	return i * grid_size + j;
 }
 
-int Prog2_2Simulation::getVectorIndex(int i, int j) const
+int Prog2_3Simulation::getVectorIndex(int i, int j) const
 {
 	return getIndex(i, j) * 3;  // Start-Index für x,y,z
 }
 
-int Prog2_2Simulation::getVectorIndex(int particle_idx) const
+int Prog2_3Simulation::getVectorIndex(int particle_idx) const
 {
 	return particle_idx * 3;  // Start-Index für x,y,z
 }
 
-
-
-void Prog2_2Simulation::reset(
+void Prog2_3Simulation::reset(
 	double dt0Param,
 	BoundaryCondition boundaryConditionParam,
 	double structKsParam, double structKdParam,
 	double sheerKsParam, double sheerKdParam,
-	double bendingKsParam, double bendingKdParam
+	double bendingKsParam, double bendingKdParam,
+	int maxSimStepsParam
 )
 {
 	this->dt = dt0Param;
@@ -411,6 +532,7 @@ void Prog2_2Simulation::reset(
 	this->structureSpring = spring(structKsParam, structKdParam);
 	this->sheerSpring = spring(sheerKsParam, sheerKdParam);
 	this->bendingSpring = spring(bendingKsParam, bendingKdParam);
+	this->maxSimSteps = maxSimStepsParam;
 
 	qDebug() << "Reset simulation with parameters:"
 		<< "dt0:" << dt
@@ -420,7 +542,8 @@ void Prog2_2Simulation::reset(
 		<< "sheerKs:" << sheerKsParam
 		<< "sheerKd:" << sheerKdParam
 		<< "bendingKs:" << bendingKsParam
-		<< "bendingKd:" << bendingKdParam;
+		<< "bendingKd:" << bendingKdParam
+		<< "maxSimSteps:" << maxSimStepsParam;
 
 
 	buildCloth();

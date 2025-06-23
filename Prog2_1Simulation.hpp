@@ -26,8 +26,11 @@ public:
 
 	enum class BoundaryCondition
 	{
-		SINGLE_CORNER,    // Nur (0,0) fixiert
-		BOTH_CORNERS      // (0,0) und (32,0) fixiert
+		SINGLE_CORNER,
+		TWO_CORNERS,
+		DIAGONAL_CORNERS,
+		THREE_CORNERS,
+		ALL_CORNERS
 	};
 
 	Eigen::VectorXd step();
@@ -49,7 +52,6 @@ private:
 
 	bool rotateInteraction = false;
 	bool firstStep = true;
-	qint64 maxSimSteps = 10;
 
 	std::vector<float> vertices;
 	std::vector<unsigned> indices;
@@ -57,7 +59,6 @@ private:
 	QPointF lastPos;
 	QElapsedTimer timer;
 	quint64 lastTimeNS = 0;
-	quint64 lastSimSteps = 0;
 
 	int width = 0, height = 0;
 

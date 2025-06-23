@@ -218,9 +218,6 @@ void Prog2_1Simulation::render()
 	auto currentTimeNS = this->timer.nsecsElapsed();
 	auto deltaTimeNS = currentTimeNS - this->lastTimeNS;
 	this->lastTimeNS = currentTimeNS;
-	qint64 simSteps = (currentTimeNS / this->dt / 1e9) - this->lastSimSteps;
-	this->lastSimSteps += simSteps;
-	simSteps = std::min(simSteps, maxSimSteps);
 	int loc = -1;
 
 	// clear color and depth buffer to black
@@ -258,15 +255,7 @@ void Prog2_1Simulation::render()
 	{
 		Eigen::Affine3d whiteTransform = Eigen::AlignedScaling3d{1.0, 1.0, 1.0} *Eigen::Affine3d::Identity();
 
-		// step so oft ausführen, wie nötig, um die Simulation zu aktualisieren
-		for(int i = 0; i < simSteps; i++)
-		{
-			this->step();
-		}
-		//qDebug() << "FPS: " << 1.0 / (deltaTimeNS / 1.0e09) << " simsteps: " << simSteps;
-		//qDebug() << "Kamera: " << cameraAzimuth << " eli: " << cameraElevation;
-
-		//auto u_max = this->u.maxCoeff();
+		this->step();
 
 		for(int i = 0; i < grid_size; ++i)
 		{
@@ -476,18 +465,29 @@ void Prog2_1Simulation::midpointStep()
 
 void Prog2_1Simulation::applyBoundaryConditions()
 {
-	if(boundaryCondition == BoundaryCondition::SINGLE_CORNER)
-	{
-		positions.segment<3>(getVectorIndex(0, 0)) = Eigen::Vector3d(0.0, 0.0, 0.0);
-		velocities.segment<3>(getVectorIndex(0, 0)).setZero();
-	}
-	else if(boundaryCondition == BoundaryCondition::BOTH_CORNERS)
-	{
-		positions.segment<3>(getVectorIndex(0, 0)) = Eigen::Vector3d(0.0, 0.0, 0.0);
-		velocities.segment<3>(getVectorIndex(0, 0)).setZero();
+	// Anfangs Ecke (0,0) immer fixieren
+	positions.segment<3>(getVectorIndex(0, 0)) = Eigen::Vector3d(0.0, 0.0, 0.0);
+	velocities.segment<3>(getVectorIndex(0, 0)).setZero();
 
-		positions.segment<3>(getVectorIndex(32, 0)) = Eigen::Vector3d(32 * dx, 0.0, 0.0);
-		velocities.segment<3>(getVectorIndex(32, 0)).setZero();
+	// Ecke nebenan (grid_size - 1, 0) fixieren
+	if(boundaryCondition == BoundaryCondition::TWO_CORNERS || boundaryCondition == BoundaryCondition::THREE_CORNERS || boundaryCondition == BoundaryCondition::ALL_CORNERS)
+	{
+		positions.segment<3>(getVectorIndex(grid_size - 1, 0)) = Eigen::Vector3d((grid_size - 1) * dx, 0.0, 0.0);
+		velocities.segment<3>(getVectorIndex(grid_size - 1, 0)).setZero();
+	}
+
+	// Diagonale Ecke (grid_size - 1, grid_size - 1) fixieren
+	if(boundaryCondition == BoundaryCondition::DIAGONAL_CORNERS || boundaryCondition == BoundaryCondition::ALL_CORNERS)
+	{
+		positions.segment<3>(getVectorIndex(grid_size - 1, grid_size - 1)) = Eigen::Vector3d((grid_size - 1) * dx, (grid_size - 1) * dx, 0.0);
+		velocities.segment<3>(getVectorIndex(grid_size - 1, grid_size - 1)).setZero();
+	}
+
+	// Letze Ecke (0, grid_size - 1) fixieren
+	if(boundaryCondition == BoundaryCondition::ALL_CORNERS || boundaryCondition == BoundaryCondition::THREE_CORNERS)
+	{
+		positions.segment<3>(getVectorIndex(0, grid_size - 1)) = Eigen::Vector3d(0.0, (grid_size - 1) * dx, 0.0);
+		velocities.segment<3>(getVectorIndex(0, grid_size - 1)).setZero();
 	}
 }
 
@@ -536,5 +536,4 @@ void Prog2_1Simulation::reset(
 
 	this->lastTimeNS = this->timer.nsecsElapsed();
 	this->timer.restart();
-	this->lastSimSteps = 0;
 }
