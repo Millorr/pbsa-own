@@ -8,7 +8,6 @@
 #include <QPoint>
 #include <QElapsedTimer>
 #include <Eigen/Core>
-#include <Eigen/LU>
 #include <Eigen/Sparse>
 
 class Prog2_2Simulation : public OpenGLRenderer
@@ -48,7 +47,7 @@ private:
 	double
 		cameraAzimuth = constants::pi<double> / 4,
 		cameraElevation = constants::pi<double> / 4;
-	double cameraDistance = 32.0; // Abstand der Kamera vom Ursprung
+	double cameraDistance = grid_size * dx; // Abstand der Kamera vom Ursprung
 
 	bool rotateInteraction = false;
 	bool firstStep = true;
@@ -114,29 +113,25 @@ private:
 
 	BoundaryCondition boundaryCondition = BoundaryCondition::SINGLE_CORNER;
 
-	spring structureSpring = spring(2000.0, 5.0, spring::Type::Structure); // Struktur-Federkonstante und Dämpfung
-	spring sheerSpring = spring(1000.0, 2.5, spring::Type::Sheer); // Scher-Federkonstante und Dämpfung
-	spring bendingSpring = spring(200.0, 1.0, spring::Type::Bending); // Biege-Federkonstante und Dämpfung
+	spring structureSpring = spring(100.0, 0.5, spring::Type::Structure); // Struktur-Federkonstante und Dämpfung
+	spring sheerSpring = spring(50.0, 0.25, spring::Type::Sheer); // Scher-Federkonstante und Dämpfung
+	spring bendingSpring = spring(10.0, 0.05, spring::Type::Bending); // Biege-Federkonstante und Dämpfung
 
 	// Zustand
-	Eigen::VectorXd positions;    // 3*N Einträge
-	Eigen::VectorXd velocities;   // 3*N Einträge
-
+	Eigen::VectorXd positions;    // 3n Dimensionen (x,y,z für jeden Punkt)
+	Eigen::VectorXd velocities;   // 3n Dimensionen
+	Eigen::VectorXd initial_positions; // Für Randbedingungen
 
 	// Numerische Hilfsmittel
-	Eigen::SparseMatrix<double> system_matrix;  // (I - a*dt*L)
-	Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver; // Recommended for very sparse and not too large problems (e.g., 2D Poisson eq.) (ref: https://eigen.tuxfamily.org/dox/group__TopicSparseSystems.html)
+	Eigen::SparseLU<Eigen::SparseMatrix<double>> solver;
 
 	// Hilfsfunktionen
+	void computeForcesAndJacobians(Eigen::VectorXd& forces, std::vector<Eigen::Triplet<double>>& dFdx_triplets, std::vector<Eigen::Triplet<double>>& dFdv_triplets);
+	void addSpringForceAndJacobians(int i1, int j1, int i2, int j2, const spring & spr, Eigen::VectorXd& F, std::vector<Eigen::Triplet<double>>& dFdx_triplets, std::vector<Eigen::Triplet<double>>& dFdv_triplets);
 	int getIndex(int i, int j) const;
 	int getVectorIndex(int i, int j)const;
 	int getVectorIndex(int particle_idx) const;
-
-	void buildSystemMatrix();
-	void setInitialConditions();
-
 	void buildMesh();
 	void buildCloth();
 	void applyBoundaryConditions();
-	void setInitialPositions();
 };

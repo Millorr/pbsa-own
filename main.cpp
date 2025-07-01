@@ -596,7 +596,7 @@ void addEx2_2Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 	auto dtSpin = new QDoubleSpinBox{};
 	dtSpin->setRange(0.0001, 100.0);
 	dtSpin->setDecimals(5);
-	dtSpin->setValue(0.001);
+	dtSpin->setValue(0.1);
 	dtLayout->addWidget(dtLabel);
 	dtLayout->addWidget(dtSpin);
 	controlLayout->addLayout(dtLayout);

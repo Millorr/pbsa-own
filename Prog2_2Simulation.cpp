@@ -7,6 +7,7 @@
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
+#include <vector>
 
 Prog2_2Simulation::Prog2_2Simulation()
 	: OpenGLRenderer{nullptr}
@@ -177,10 +178,10 @@ void Prog2_2Simulation::buildMesh()
 
 void Prog2_2Simulation::buildCloth()
 {
-
-	// Vektoren initialisieren
-	positions.resize(3 * grid_size * grid_size);
-	velocities.resize(3 * grid_size * grid_size);
+	int num_particles = grid_size * grid_size;
+	positions.resize(3 * num_particles);
+	velocities.resize(3 * num_particles);
+	initial_positions.resize(3 * num_particles);
 
 	velocities.setZero();  // Alle Geschwindigkeiten auf 0
 
@@ -197,6 +198,7 @@ void Prog2_2Simulation::buildCloth()
 			positions[idx + 2] = 0.0f;
 		}
 	}
+	initial_positions = positions;
 }
 
 void Prog2_2Simulation::resize(int w, int h)
@@ -254,28 +256,15 @@ void Prog2_2Simulation::render()
 	glBindVertexArray(this->gridVAO.id());
 
 	{
-		Eigen::Affine3d whiteTransform = Eigen::AlignedScaling3d{1.0, 1.0, 1.0} *Eigen::Affine3d::Identity();
+		Eigen::Affine3d whiteTransform = Eigen::Affine3d::Identity();
 
-		// step so oft ausführen, wie nötig, um die Simulation zu aktualisieren
-		for(int i = 0; i < simSteps; i++)
+		this->step();
+
+		for (int i = 0; i < grid_size * grid_size; ++i)
 		{
-			this->step();
-		}
-		//qDebug() << "FPS: " << 1.0 / (deltaTimeNS / 1.0e09) << " simsteps: " << simSteps << " center: " << this->u(getIndex(grid_size/2, grid_size/2)) << " sum: " << this->u.sum();
-		//qDebug() << "Kamera: " << cameraAzimuth << " eli: " << cameraElevation;
-
-		//auto u_max = this->u.maxCoeff();
-
-		for(int i = 0; i < grid_size; ++i)
-		{
-			for(int j = 0; j < grid_size; ++j)
-			{
-				int idx = getVectorIndex(i, j);
-
-				vertices[idx]		= positions[idx];
-				vertices[idx + 1]	= positions[idx + 1];
-				vertices[idx + 2]	= positions[idx + 2];
-			}
+			vertices[3 * i + 0] = positions[3 * i + 0];
+			vertices[3 * i + 1] = positions[3 * i + 1];
+			vertices[3 * i + 2] = positions[3 * i + 2];
 		}
 		glBindBuffer(GL_ARRAY_BUFFER, gridVertexBuffer.id());
 		glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * vertices.size(), vertices.data());
@@ -336,6 +325,98 @@ void Prog2_2Simulation::mouseEvent(QMouseEvent * e)
 	}
 }
 
+void Prog2_2Simulation::addSpringForceAndJacobians(int i1, int j1, int i2, int j2, const spring& spr, Eigen::VectorXd& F, std::vector<Eigen::Triplet<double>>& dFdx_triplets, std::vector<Eigen::Triplet<double>>& dFdv_triplets)
+{
+	if (i2 < 0 || i2 >= grid_size || j2 < 0 || j2 >= grid_size) return;
+
+	int idx1 = getVectorIndex(i1, j1);
+	int idx2 = getVectorIndex(i2, j2);
+
+	Eigen::Vector3d pos1 = positions.segment<3>(idx1);
+	Eigen::Vector3d pos2 = positions.segment<3>(idx2);
+	Eigen::Vector3d vel1 = velocities.segment<3>(idx1);
+	Eigen::Vector3d vel2 = velocities.segment<3>(idx2);
+
+	Eigen::Vector3d x_ij = pos2 - pos1;
+	Eigen::Vector3d v_ij = vel2 - vel1;
+	double r = x_ij.norm();
+	if (r < 1e-9) return;
+
+	Eigen::Vector3d x_ij_hat = x_ij / r;
+	double rest_length = dx;
+	if (spr.type == spring::Type::Sheer) rest_length = dx * sqrt(2.0);
+	else if (spr.type == spring::Type::Bending) rest_length = 2.0 * dx;
+
+	// Kraftberechnung
+	double f_spring_mag = spr.ks * (r - rest_length);
+	double f_damp_mag = spr.kd * v_ij.dot(x_ij_hat);
+	Eigen::Vector3d force = (f_spring_mag + f_damp_mag) * x_ij_hat;
+	F.segment<3>(idx1) += force;
+	F.segment<3>(idx2) -= force;
+
+    // Berechnung der Jacobi-Matrizen
+    // Die Kraft F_ij auf Partikel i durch Partikel j ist F_ij = (ks(r-l0) + kd*v_ij.dot(x_ij_hat)) * x_ij_hat
+    Eigen::Matrix3d I = Eigen::Matrix3d::Identity();
+    Eigen::Matrix3d xxT_hat = x_ij_hat * x_ij_hat.transpose();
+
+    // Jacobi-Block dF_ij/dv_j = dF_ij/dv_ij
+    // d(f_damp)/dv_ij = d(kd * (v_ij.dot(x_ij_hat)) * x_ij_hat)/dv_ij = kd * x_ij_hat * x_ij_hat^T
+    Eigen::Matrix3d K_v = spr.kd * xxT_hat;
+
+    // Jacobi-Block dF_ij/dx_j = dF_ij/dx_ij
+    // dF_ij/dx_ij = d(f_spring)/dx_ij + d(f_damp)/dx_ij
+    // d(f_spring)/dx_ij = d(ks(r-l0)*x_ij_hat)/dx_ij
+    //                   = -ks/r * x_ij_hat * x_ij^T + ks * (1-l0/r) * I  (nach Vereinfachung)
+    Eigen::Matrix3d K_x_spring = -spr.ks * ((1.0 / r) * (x_ij * x_ij_hat.transpose()) - (1 - rest_length / r) * I);
+    // d(f_damp)/dx_ij = d(kd*v_ij.dot(x_ij_hat)*x_ij_hat)/dx_ij
+    //                 = kd/r * ( (v_ij*x_hat^T) + (x_hat*v_ij^T) - 2*(v_ij.dot(x_hat))*x_hat*x_hat^T )
+    Eigen::Matrix3d K_x_damp = (spr.kd / r) * (v_ij * x_ij_hat.transpose() + x_ij_hat * v_ij.transpose() - 2 * v_ij.dot(x_ij_hat) * xxT_hat);
+    Eigen::Matrix3d K_x = K_x_spring + K_x_damp;
+
+	// Hinzufügen der 3x3-Blöcke zur Triplet-Liste
+	for (int row = 0; row < 3; ++row) {
+		for (int col = 0; col < 3; ++col) {
+			// dF/dx: dF_i/dx_i = -Kx, dF_i/dx_j = Kx, dF_j/dx_i = Kx, dF_j/dx_j = -Kx
+			dFdx_triplets.emplace_back(idx1 + row, idx1 + col, -K_x(row, col));
+			dFdx_triplets.emplace_back(idx1 + row, idx2 + col, K_x(row, col));
+			dFdx_triplets.emplace_back(idx2 + row, idx1 + col, K_x(row, col));
+			dFdx_triplets.emplace_back(idx2 + row, idx2 + col, -K_x(row, col));
+			// dF/dv: dF_i/dv_i = -Kv, dF_i/dv_j = Kv, dF_j/dv_i = Kv, dF_j/dv_j = -Kv
+			dFdv_triplets.emplace_back(idx1 + row, idx1 + col, -K_v(row, col));
+			dFdv_triplets.emplace_back(idx1 + row, idx2 + col, K_v(row, col));
+			dFdv_triplets.emplace_back(idx2 + row, idx1 + col, K_v(row, col));
+			dFdv_triplets.emplace_back(idx2 + row, idx2 + col, -K_v(row, col));
+		}
+	}
+}
+
+void Prog2_2Simulation::computeForcesAndJacobians(Eigen::VectorXd& forces, std::vector<Eigen::Triplet<double>>& dFdx_triplets, std::vector<Eigen::Triplet<double>>& dFdv_triplets)
+{
+	int num_particles = grid_size * grid_size;
+	forces.setZero(num_particles * 3);
+	dFdx_triplets.clear();
+	dFdv_triplets.clear();
+
+	for (int i = 0; i < num_particles; ++i)
+	{
+		forces[3 * i + 2] -= m * g;
+	}
+
+	for (int i = 0; i < grid_size; ++i)
+	{
+		for (int j = 0; j < grid_size; ++j)
+		{
+			addSpringForceAndJacobians(i, j, i + 1, j, structureSpring, forces, dFdx_triplets, dFdv_triplets);
+			addSpringForceAndJacobians(i, j, i, j + 1, structureSpring, forces, dFdx_triplets, dFdv_triplets);
+			addSpringForceAndJacobians(i, j, i + 1, j + 1, sheerSpring, forces, dFdx_triplets, dFdv_triplets);
+			addSpringForceAndJacobians(i, j, i + 1, j - 1, sheerSpring, forces, dFdx_triplets, dFdv_triplets);
+			addSpringForceAndJacobians(i, j, i + 2, j, bendingSpring, forces, dFdx_triplets, dFdv_triplets);
+			addSpringForceAndJacobians(i, j, i, j + 2, bendingSpring, forces, dFdx_triplets, dFdv_triplets);
+		}
+	}
+}
+
+
 Eigen::VectorXd Prog2_2Simulation::step()
 {
 	if(firstStep)
@@ -345,7 +426,40 @@ Eigen::VectorXd Prog2_2Simulation::step()
 		return positions;  // Ersten Frame überspringen
 	}
 
-	// do stuff
+	const int num_dofs = 3 * grid_size * grid_size;
+	Eigen::VectorXd F(num_dofs);
+	std::vector<Eigen::Triplet<double>> dFdx_triplets, dFdv_triplets;
+
+	computeForcesAndJacobians(F, dFdx_triplets, dFdv_triplets);
+
+	Eigen::SparseMatrix<double> dFdx(num_dofs, num_dofs), dFdv(num_dofs, num_dofs);
+	dFdx.setFromTriplets(dFdx_triplets.begin(), dFdx_triplets.end());
+	dFdv.setFromTriplets(dFdv_triplets.begin(), dFdv_triplets.end());
+
+	Eigen::SparseMatrix<double> I(num_dofs, num_dofs);
+	I.setIdentity();
+
+	Eigen::SparseMatrix<double> A = (m * I) - (dt * dFdv) - (dt * dt * dFdx);
+	Eigen::VectorXd b = dt * (F + dt * dFdx * velocities);
+
+	solver.compute(A);
+	if (solver.info() != Eigen::Success) {
+		qDebug() << "Löser konnte A nicht faktorisieren";
+		return positions;
+	}
+	Eigen::VectorXd delta_v = solver.solve(b);
+	if (solver.info() != Eigen::Success) {
+		qDebug() << "Löser konnte delta_v nicht berechnen";
+		return positions;
+	}
+
+        qDebug().noquote() << QString("Schritt: |Δv| = %2, |b-A*Δv| = %3")
+            .arg(delta_v.norm(), 0, 'g', 4)
+            .arg((b - A * delta_v).norm(), 0, 'g', 4);
+
+	velocities += delta_v;
+	positions += dt * velocities;
+
 	applyBoundaryConditions();
 
 	return positions;
@@ -408,9 +522,12 @@ void Prog2_2Simulation::reset(
 {
 	this->dt = dt0Param;
 	this->boundaryCondition = boundaryConditionParam;
-	this->structureSpring = spring(structKsParam, structKdParam);
-	this->sheerSpring = spring(sheerKsParam, sheerKdParam);
-	this->bendingSpring = spring(bendingKsParam, bendingKdParam);
+	this->structureSpring.ks = structKsParam;
+	this->structureSpring.kd = structKdParam;
+	this->sheerSpring.ks = sheerKsParam;
+	this->sheerSpring.kd = sheerKdParam;
+	this->bendingSpring.ks = bendingKsParam;
+	this->bendingSpring.kd = bendingKdParam;
 
 	qDebug() << "Reset simulation with parameters:"
 		<< "dt0:" << dt
@@ -426,6 +543,6 @@ void Prog2_2Simulation::reset(
 	buildCloth();
 
 	this->lastTimeNS = this->timer.nsecsElapsed();
+	this->firstStep = true;
 	this->timer.restart();
-	this->lastSimSteps = 0;
 }
