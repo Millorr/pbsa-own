@@ -16,7 +16,7 @@ Prog2_1Simulation::Prog2_1Simulation()
 	{
 		// create/bind a vertex array object to store bindings to array and element buffers
 		glBindVertexArray(this->gridVAO.id());
-
+		// create mesh for visualisation and cloth for simulation (is kinda ambigous but works for now)
 		buildMesh();
 		buildCloth();
 
@@ -138,6 +138,8 @@ Prog2_1Simulation::Prog2_1Simulation()
 Prog2_1Simulation::~Prog2_1Simulation() = default;
 
 
+// build the mesh for the cloth simulation
+// (a grid of vertices with indices for triangles)
 void Prog2_1Simulation::buildMesh()
 {
 	// sehr ineffizient, aber einfach zu verstehen
@@ -145,6 +147,7 @@ void Prog2_1Simulation::buildMesh()
 	vertices.clear();
 	indices.clear();
 
+	// Anzahl der Zellen in der Kante des Gitters
 	for(int i = 0; i < grid_size; ++i)
 	{
 		for(int j = 0; j < grid_size; ++j)
@@ -175,6 +178,8 @@ void Prog2_1Simulation::buildMesh()
 	}
 }
 
+// build the cloth simulation grid
+// (a grid of particles with positions, velocities and forces)
 void Prog2_1Simulation::buildCloth()
 {
 	// Vektoren initialisieren
@@ -255,8 +260,10 @@ void Prog2_1Simulation::render()
 	{
 		Eigen::Affine3d whiteTransform = Eigen::AlignedScaling3d{1.0, 1.0, 1.0} *Eigen::Affine3d::Identity();
 
+		// run one simulation step per frame update
 		this->step();
 
+		// compute forces and update positions/velocities
 		for(int i = 0; i < grid_size; ++i)
 		{
 			for(int j = 0; j < grid_size; ++j)
@@ -327,6 +334,7 @@ void Prog2_1Simulation::mouseEvent(QMouseEvent * e)
 	}
 }
 
+// Perform one simulation step and return the new positions of the particles
 Eigen::VectorXd Prog2_1Simulation::step()
 {
 	if(firstStep)
@@ -342,6 +350,8 @@ Eigen::VectorXd Prog2_1Simulation::step()
 	return positions;
 }
 
+// Berechnet die Kräfte auf die Partikel
+// und speichert sie in der forces-Vektor
 void Prog2_1Simulation::computeForces()
 {
 	forces.setZero();  // Alle Kräfte zurücksetzen
@@ -374,6 +384,7 @@ void Prog2_1Simulation::computeForces()
 	}
 }
 
+// Fügt die Federkraft zwischen den Partikeln (i1,j1) und (i2,j2) hinzu
 void Prog2_1Simulation::addSpringForce(int i1, int j1, int i2, int j2, const spring & spr)
 {
 	// Grenzen prüfen
@@ -429,6 +440,7 @@ void Prog2_1Simulation::addSpringForce(int i1, int j1, int i2, int j2, const spr
 	forces.segment<3>(idx2) -= force;
 }
 
+// Midpoint-Integration für die Simulation
 void Prog2_1Simulation::midpointStep()
 {
 	// k1 = f(t, q) berechnen
@@ -463,6 +475,7 @@ void Prog2_1Simulation::midpointStep()
 	positions += dt * k2_pos;
 }
 
+// clamping corner positions to selected fixed boundary conditions
 void Prog2_1Simulation::applyBoundaryConditions()
 {
 	// Anfangs Ecke (0,0) immer fixieren
@@ -491,22 +504,26 @@ void Prog2_1Simulation::applyBoundaryConditions()
 	}
 }
 
+// Hilfsfunktion, um den 2D-Index (i,j) in einen 1D-Index zu konvertieren
 int Prog2_1Simulation::getIndex(int i, int j) const
 {
 	// von 2d index auf 1d index
 	return i * grid_size + j;
 }
 
+// Hilfsfunktion, um den 2D-Index (i,j) in einen 1D-Index für die Vektoren zu konvertieren
 int Prog2_1Simulation::getVectorIndex(int i, int j) const
 {
 	return getIndex(i, j) * 3;  // Start-Index für x,y,z
 }
 
+// Hilfsfunktion, um den 1D-Index für die Vektoren zu konvertieren
 int Prog2_1Simulation::getVectorIndex(int particle_idx) const
 {
 	return particle_idx * 3;  // Start-Index für x,y,z
 }
 
+// Reset the simulation with new parameters
 void Prog2_1Simulation::reset(
 	double dt0Param,
 	BoundaryCondition boundaryConditionParam,

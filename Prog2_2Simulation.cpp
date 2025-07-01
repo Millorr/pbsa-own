@@ -325,34 +325,36 @@ void Prog2_2Simulation::mouseEvent(QMouseEvent * e)
 	}
 }
 
+// Fügt die Federkraft und deren Jacobi-Matrizen für ein Partikelpaar (i1,j1)-(i2,j2) zum Gesamtsystem hinzu.
+// Berechnet sowohl die Kraft als auch die Ableitungen nach Position und Geschwindigkeit (Jacobi-Matrizen).
 void Prog2_2Simulation::addSpringForceAndJacobians(int i1, int j1, int i2, int j2, const spring& spr, Eigen::VectorXd& F, std::vector<Eigen::Triplet<double>>& dFdx_triplets, std::vector<Eigen::Triplet<double>>& dFdv_triplets)
 {
-	if (i2 < 0 || i2 >= grid_size || j2 < 0 || j2 >= grid_size) return;
+    if (i2 < 0 || i2 >= grid_size || j2 < 0 || j2 >= grid_size) return;
 
-	int idx1 = getVectorIndex(i1, j1);
-	int idx2 = getVectorIndex(i2, j2);
+    int idx1 = getVectorIndex(i1, j1);
+    int idx2 = getVectorIndex(i2, j2);
 
-	Eigen::Vector3d pos1 = positions.segment<3>(idx1);
-	Eigen::Vector3d pos2 = positions.segment<3>(idx2);
-	Eigen::Vector3d vel1 = velocities.segment<3>(idx1);
-	Eigen::Vector3d vel2 = velocities.segment<3>(idx2);
+    Eigen::Vector3d pos1 = positions.segment<3>(idx1);
+    Eigen::Vector3d pos2 = positions.segment<3>(idx2);
+    Eigen::Vector3d vel1 = velocities.segment<3>(idx1);
+    Eigen::Vector3d vel2 = velocities.segment<3>(idx2);
 
-	Eigen::Vector3d x_ij = pos2 - pos1;
-	Eigen::Vector3d v_ij = vel2 - vel1;
-	double r = x_ij.norm();
-	if (r < 1e-9) return;
+    Eigen::Vector3d x_ij = pos2 - pos1;
+    Eigen::Vector3d v_ij = vel2 - vel1;
+    double r = x_ij.norm();
+    if (r < 1e-9) return;
 
-	Eigen::Vector3d x_ij_hat = x_ij / r;
-	double rest_length = dx;
-	if (spr.type == spring::Type::Sheer) rest_length = dx * sqrt(2.0);
-	else if (spr.type == spring::Type::Bending) rest_length = 2.0 * dx;
+    Eigen::Vector3d x_ij_hat = x_ij / r;
+    double rest_length = dx;
+    if (spr.type == spring::Type::Sheer) rest_length = dx * sqrt(2.0);
+    else if (spr.type == spring::Type::Bending) rest_length = 2.0 * dx;
 
-	// Kraftberechnung
-	double f_spring_mag = spr.ks * (r - rest_length);
-	double f_damp_mag = spr.kd * v_ij.dot(x_ij_hat);
-	Eigen::Vector3d force = (f_spring_mag + f_damp_mag) * x_ij_hat;
-	F.segment<3>(idx1) += force;
-	F.segment<3>(idx2) -= force;
+    // Kraftberechnung
+    double f_spring_mag = spr.ks * (r - rest_length);
+    double f_damp_mag = spr.kd * v_ij.dot(x_ij_hat);
+    Eigen::Vector3d force = (f_spring_mag + f_damp_mag) * x_ij_hat;
+    F.segment<3>(idx1) += force;
+    F.segment<3>(idx2) -= force;
 
     // Berechnung der Jacobi-Matrizen
     // Die Kraft F_ij auf Partikel i durch Partikel j ist F_ij = (ks(r-l0) + kd*v_ij.dot(x_ij_hat)) * x_ij_hat
@@ -390,6 +392,7 @@ void Prog2_2Simulation::addSpringForceAndJacobians(int i1, int j1, int i2, int j
 	}
 }
 
+// Berechnet die Kräfte und Jacobi-Matrizen für alle Partikel im Gitter
 void Prog2_2Simulation::computeForcesAndJacobians(Eigen::VectorXd& forces, std::vector<Eigen::Triplet<double>>& dFdx_triplets, std::vector<Eigen::Triplet<double>>& dFdv_triplets)
 {
 	int num_particles = grid_size * grid_size;
@@ -416,7 +419,7 @@ void Prog2_2Simulation::computeForcesAndJacobians(Eigen::VectorXd& forces, std::
 	}
 }
 
-
+// Führt einen Simulationsschritt aus und aktualisiert die Positionen und Geschwindigkeiten der Partikel
 Eigen::VectorXd Prog2_2Simulation::step()
 {
 	if(firstStep)
@@ -465,7 +468,7 @@ Eigen::VectorXd Prog2_2Simulation::step()
 	return positions;
 }
 
-
+// Wendet die Randbedingungen an, indem es bestimmte Ecken des Gitters fixiert
 void Prog2_2Simulation::applyBoundaryConditions()
 {
 	// Anfangs Ecke (0,0) immer fixieren
@@ -494,17 +497,20 @@ void Prog2_2Simulation::applyBoundaryConditions()
 	}
 }
 
+// Hilfsfunktionen, um von 2D-Index auf 1D-Index zu konvertieren
 int Prog2_2Simulation::getIndex(int i, int j) const
 {
 	// von 2d index auf 1d index
 	return i * grid_size + j;
 }
 
+// Hilfsfunktionen, um von 2D-Index auf 1D-Index für Vektoren zu konvertieren
 int Prog2_2Simulation::getVectorIndex(int i, int j) const
 {
 	return getIndex(i, j) * 3;  // Start-Index für x,y,z
 }
 
+// Hilfsfunktion, um von Partikel-Index auf Vektor-Index zu konvertieren
 int Prog2_2Simulation::getVectorIndex(int particle_idx) const
 {
 	return particle_idx * 3;  // Start-Index für x,y,z
