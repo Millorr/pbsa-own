@@ -224,6 +224,7 @@ void Prog2_3Simulation::render()
 	this->lastTimeNS = currentTimeNS;
 	qint64 simSteps = (currentTimeNS / this->dt / 1e9) - this->lastSimSteps;
 	this->lastSimSteps += simSteps;
+	auto skippedSteps = std::max(simSteps - maxSimSteps, 0LL);
 	simSteps = std::min(simSteps, maxSimSteps);
 	int loc = -1;
 
@@ -268,7 +269,10 @@ void Prog2_3Simulation::render()
 		{
 			this->step();
 		}
-		//qDebug() << "FPS: " << 1.0 / (deltaTimeNS / 1.0e09) << " simsteps: " << simSteps;
+		double realTimeFactor = (simSteps * dt) / (deltaTimeNS / 1.0e09);
+
+		qDebug() << "FPS: " << 1.0 / (deltaTimeNS / 1.0e09) << " realtime: " << realTimeFactor << " skipped Steps: " << skippedSteps;
+
 		//qDebug() << "Kamera: " << cameraAzimuth << " eli: " << cameraElevation;
 
 		//auto u_max = this->u.maxCoeff();

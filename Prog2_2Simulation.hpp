@@ -92,7 +92,7 @@ private:
 	static constexpr double m = 0.03;  // 30g in kg
 
 	// Simulation Parameters
-	double dt = 0.1;
+	double dt = 0.001;
 
 
 	struct spring
