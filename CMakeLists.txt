@@ -116,10 +116,14 @@ target_sources(
     Prog1_1Simulation.cpp Prog1_1Simulation.hpp
     Prog1_2Simulation.cpp Prog1_2Simulation.hpp
     Prog1_3Simulation.cpp Prog1_3Simulation.hpp
+	Prog2_1Simulation.cpp Prog2_1Simulation.hpp
+	Prog2_2Simulation.cpp Prog2_2Simulation.hpp
+	Prog2_3Simulation.cpp Prog2_3Simulation.hpp
     helpers.hpp helpers.cpp
     constants.hpp
     shaders/icosphere.vert shaders/icosphere.frag
 	shaders/lambertShader.vert shaders/lambertShader.frag
+	shaders/clothShader.vert shaders/clothShader.frag
     shaders/skybox.vert shaders/skybox.frag
     icon.qrc
     textures.qrc

@@ -21,7 +21,9 @@
 #include "Prog1_1Simulation.hpp"
 #include "Prog1_2Simulation.hpp"
 #include "Prog1_3Simulation.hpp"
-
+#include "Prog2_1Simulation.hpp"
+#include "Prog2_2Simulation.hpp"
+#include "Prog2_3Simulation.hpp"
 
 #ifdef _WIN32
 // always use (proper) hardware acceleration if available, since Intel's iGPUs have extremely buggy OpenGL support
@@ -50,11 +52,11 @@ void addExampleTab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 	});
 }
 
-void addEx1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
+void addEx1_1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 {
 	auto current = tabWidget->count();
 	auto tab = new QWidget{tabWidget};
-	tabWidget->addTab(tab, "Exercise 1");
+	tabWidget->addTab(tab, "Exercise 1.1");
 
 	// Layouts
 	auto mainLayout = new QVBoxLayout{tab};
@@ -166,11 +168,11 @@ void addEx1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 	});
 }
 
-void addEx2Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
+void addEx1_2Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 {
 	int current = tabWidget->count();
 	QWidget* tab = new QWidget{tabWidget};
-	tabWidget->addTab(tab, "Exercise 2");
+	tabWidget->addTab(tab, "Exercise 1.2");
 
 	// Layouts
 	auto mainLayout = new QVBoxLayout{tab};
@@ -310,11 +312,11 @@ void addEx2Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 	});
 }
 
-void addEx3Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
+void addEx1_3Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 {
 	auto current = tabWidget->count();
 	auto tab = new QWidget{tabWidget};
-	tabWidget->addTab(tab, "Exercise 3");
+	tabWidget->addTab(tab, "Exercise 1.3");
 
 	// Layouts
 	auto mainLayout = new QVBoxLayout{tab};
@@ -392,22 +394,422 @@ void addEx3Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
 	});
 
 }
+
+void addExercise1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
+{
+	auto current = tabWidget->count();
+	auto exerciseTab = new QWidget{tabWidget};
+	tabWidget->addTab(exerciseTab, "Exercise 1");
+
+	// Unter-TabWidget für die einzelnen Exercises
+	auto subTabWidget = new QTabWidget{exerciseTab};
+	subTabWidget->setTabPosition(QTabWidget::TabPosition::North);
+
+	// Layout für den Übung 1 Tab
+	auto layout = new QVBoxLayout{exerciseTab};
+	layout->addWidget(subTabWidget);
+
+	// Die bisherigen Exercise-Tabs als Unter-Tabs hinzufügen
+	addEx1_1Tab(mainWindow, subTabWidget);
+	addEx1_2Tab(mainWindow, subTabWidget);
+	addEx1_3Tab(mainWindow, subTabWidget);
+
+	subTabWidget->setCurrentIndex(0);
+
+	// Beim Wechsel auf diesen Haupt-Tab das aktuelle Sub-Tab triggern
+	QObject::connect(tabWidget, &QTabWidget::currentChanged, [=] (int index) {
+		if(index == current)
+		{
+			emit subTabWidget->currentChanged(subTabWidget->currentIndex());
+		}
+	});
+}
+
+QWidget * createSpringBlock(const QString & springType, QDoubleSpinBox *& ksSpin, QDoubleSpinBox *& kdSpin)
+{
+	auto block = new QWidget;
+	auto layout = new QVBoxLayout{block};
+
+	// Feder-Art oben
+	auto typeLabel = new QLabel{springType};
+	layout->addWidget(typeLabel);
+
+	// ks und kd unten
+	auto paramsLayout = new QHBoxLayout{};
+	auto ksLabel = new QLabel{"ks:"};
+	ksSpin = new QDoubleSpinBox{};
+	ksSpin->setRange(-1000.0, 1000.0);
+	ksSpin->setDecimals(4);
+	ksSpin->setValue(10.0);
+
+	auto kdLabel = new QLabel{"kd:"};
+	kdSpin = new QDoubleSpinBox{};
+	kdSpin->setRange(-1000.0, 1000.0);
+	kdSpin->setDecimals(4);
+	kdSpin->setValue(0.1);
+
+	paramsLayout->addWidget(ksLabel);
+	paramsLayout->addWidget(ksSpin);
+	paramsLayout->addWidget(kdLabel);
+	paramsLayout->addWidget(kdSpin);
+
+	layout->addLayout(paramsLayout);
+
+	return block;
+}
+QWidget * createSpringBlock(const QString & springType, QDoubleSpinBox *& ksSpin, QDoubleSpinBox *& kdSpin, double ks, double kd)
+{
+	auto block = new QWidget;
+	auto layout = new QVBoxLayout{block};
+
+	// Feder-Art oben
+	auto typeLabel = new QLabel{springType};
+	layout->addWidget(typeLabel);
+
+	// ks und kd unten
+	auto paramsLayout = new QHBoxLayout{};
+	auto ksLabel = new QLabel{"ks:"};
+	ksSpin = new QDoubleSpinBox{};
+	ksSpin->setRange(0.0, 10000.0);
+	ksSpin->setDecimals(4);
+	ksSpin->setValue(ks);
+
+	auto kdLabel = new QLabel{"kd:"};
+	kdSpin = new QDoubleSpinBox{};
+	kdSpin->setRange(0.0, 1000.0);
+	kdSpin->setDecimals(4);
+	kdSpin->setValue(kd);
+
+	paramsLayout->addWidget(ksLabel);
+	paramsLayout->addWidget(ksSpin);
+	paramsLayout->addWidget(kdLabel);
+	paramsLayout->addWidget(kdSpin);
+
+	layout->addLayout(paramsLayout);
+
+	return block;
+}
+
+void addEx2_1Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
+{
+	auto current = tabWidget->count();
+	auto tab = new QWidget{tabWidget};
+	tabWidget->addTab(tab, "Exercise 2.1 a)");
+
+	// Layouts
+	auto mainLayout = new QVBoxLayout{tab};
+	auto controlLayout = new QVBoxLayout{};
+	auto controlGroup = new QGroupBox{"Simulation Controls"};
+	controlGroup->setLayout(controlLayout);
+
+	// delta t (Zeitschritt)
+	auto dtLayout = new QHBoxLayout{};
+	auto dtLabel = new QLabel{"Δt (Zeitschritt)"};
+	auto dtSpin = new QDoubleSpinBox{};
+	dtSpin->setRange(0.0001, 100.0);
+	dtSpin->setDecimals(5);
+	dtSpin->setValue(0.001);
+	dtLayout->addWidget(dtLabel);
+	dtLayout->addWidget(dtSpin);
+	controlLayout->addLayout(dtLayout);
+
+
+	auto boundaryConditionLayout = new QHBoxLayout{};
+	auto boundaryConditionLabel = new QLabel{"Randbedingung"};
+	auto boundaryConditionCombo = new QComboBox{};
+	boundaryConditionCombo->addItem("Eine Ecke", QVariant::fromValue(0));
+	boundaryConditionCombo->addItem("Zwei Ecken", QVariant::fromValue(1));
+	boundaryConditionCombo->addItem("Diagonale Ecken", QVariant::fromValue(2));
+	boundaryConditionCombo->addItem("Drei Ecken", QVariant::fromValue(3));
+	boundaryConditionCombo->addItem("Alle Ecken", QVariant::fromValue(4));
+	boundaryConditionLayout->addWidget(boundaryConditionLabel);
+	boundaryConditionLayout->addWidget(boundaryConditionCombo);
+	controlLayout->addLayout(boundaryConditionLayout);
+
+
+	QDoubleSpinBox * structKs, * structKd;
+	auto structSpringBlock = createSpringBlock("Struktur-Feder", structKs, structKd, 100.0, 0.5);
+	controlLayout->addWidget(structSpringBlock);
+
+	QDoubleSpinBox * shearKs, * shearKd;
+	auto shearSpringBlock = createSpringBlock("Scher-Feder", shearKs, shearKd, 50.0, 0.25);
+	controlLayout->addWidget(shearSpringBlock);
+
+	QDoubleSpinBox * bendKs, * bendKd;
+	auto bendSpringBlock = createSpringBlock("Biege-Feder", bendKs, bendKd, 10.0, 0.05);
+	controlLayout->addWidget(bendSpringBlock);
+
+
+	// Reset-Button
+	auto resetButton = new QPushButton{"Reset"};
+	controlLayout->addWidget(resetButton);
+
+	auto glWidget = new QWidget{}; // Platzhalter
+	// -> Das tatsächliche Widget wird über das RendererFactory erstellt und dann hier gesetzt
+
+	mainLayout->addWidget(controlGroup);
+	mainLayout->addWidget(glWidget, 1);
+	QWidget::connect(tabWidget, &QTabWidget::currentChanged, [=] (int index) {
+		if(index != current)
+			return;
+
+		mainWindow->setRendererFactory(
+			[=] (QObject * parent) {
+			auto sim = new Prog2_1Simulation{};
+			sim->setParent(parent);
+
+			QObject::connect(resetButton, &QPushButton::clicked, [=] () {
+				sim->reset(
+					dtSpin->value(),
+					static_cast<Prog2_1Simulation::BoundaryCondition>(boundaryConditionCombo->currentData().value<int>()),
+					structKs->value(),
+					structKd->value(),
+					shearKs->value(),
+					shearKd->value(),
+					bendKs->value(),
+					bendKd->value()
+				);
+			});
+
+			return sim;
+		}
+		);
+	});
+
+}
+
+void addEx2_2Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
+{
+	auto current = tabWidget->count();
+	auto tab = new QWidget{tabWidget};
+	tabWidget->addTab(tab, "Exercise 2.1 b)");
+
+	// Layouts
+	auto mainLayout = new QVBoxLayout{tab};
+	auto controlLayout = new QVBoxLayout{};
+	auto controlGroup = new QGroupBox{"Simulation Controls"};
+	controlGroup->setLayout(controlLayout);
+
+	// delta t (Zeitschritt)
+	auto dtLayout = new QHBoxLayout{};
+	auto dtLabel = new QLabel{"Δt (Zeitschritt)"};
+	auto dtSpin = new QDoubleSpinBox{};
+	dtSpin->setRange(0.0001, 100.0);
+	dtSpin->setDecimals(5);
+	dtSpin->setValue(0.001);
+	dtLayout->addWidget(dtLabel);
+	dtLayout->addWidget(dtSpin);
+	controlLayout->addLayout(dtLayout);
+
+
+	auto boundaryConditionLayout = new QHBoxLayout{};
+	auto boundaryConditionLabel = new QLabel{"Randbedingung"};
+	auto boundaryConditionCombo = new QComboBox{};
+	boundaryConditionCombo->addItem("Eine Ecke", QVariant::fromValue(0));
+	boundaryConditionCombo->addItem("Zwei Ecken", QVariant::fromValue(1));
+	boundaryConditionCombo->addItem("Diagonale Ecken", QVariant::fromValue(2));
+	boundaryConditionCombo->addItem("Drei Ecken", QVariant::fromValue(3));
+	boundaryConditionCombo->addItem("Alle Ecken", QVariant::fromValue(4));
+	boundaryConditionLayout->addWidget(boundaryConditionLabel);
+	boundaryConditionLayout->addWidget(boundaryConditionCombo);
+	controlLayout->addLayout(boundaryConditionLayout);
+
+
+	QDoubleSpinBox * structKs, * structKd;
+	auto structSpringBlock = createSpringBlock("Struktur-Feder", structKs, structKd, 100, 0.5);
+	controlLayout->addWidget(structSpringBlock);
+
+	QDoubleSpinBox * shearKs, * shearKd;
+	auto shearSpringBlock = createSpringBlock("Scher-Feder", shearKs, shearKd, 50, 0.25);
+	controlLayout->addWidget(shearSpringBlock);
+
+	QDoubleSpinBox * bendKs, * bendKd;
+	auto bendSpringBlock = createSpringBlock("Biege-Feder", bendKs, bendKd, 10, 0.05);
+	controlLayout->addWidget(bendSpringBlock);
+
+
+	// Reset-Button
+	auto resetButton = new QPushButton{"Reset"};
+	controlLayout->addWidget(resetButton);
+
+	auto glWidget = new QWidget{}; // Platzhalter
+	// -> Das tatsächliche Widget wird über das RendererFactory erstellt und dann hier gesetzt
+
+	mainLayout->addWidget(controlGroup);
+	mainLayout->addWidget(glWidget, 1);
+	QWidget::connect(tabWidget, &QTabWidget::currentChanged, [=] (int index) {
+		if(index != current)
+			return;
+
+		mainWindow->setRendererFactory(
+			[=] (QObject * parent) {
+			auto sim = new Prog2_2Simulation{};
+			sim->setParent(parent);
+
+			QObject::connect(resetButton, &QPushButton::clicked, [=] () {
+				sim->reset(
+					dtSpin->value(),
+					static_cast<Prog2_2Simulation::BoundaryCondition>(boundaryConditionCombo->currentData().value<int>()),
+					structKs->value(),
+					structKd->value(),
+					shearKs->value(),
+					shearKd->value(),
+					bendKs->value(),
+					bendKd->value()
+				);
+			});
+
+			return sim;
+		}
+		);
+	});
+
+}
+
+void addEx2_3Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
+{
+	auto current = tabWidget->count();
+	auto tab = new QWidget{tabWidget};
+	tabWidget->addTab(tab, "Exercise 2.1 c)");
+
+	// Layouts
+	auto mainLayout = new QVBoxLayout{tab};
+	auto controlLayout = new QVBoxLayout{};
+	auto controlGroup = new QGroupBox{"Simulation Controls"};
+	controlGroup->setLayout(controlLayout);
+
+	// delta t (Zeitschritt)
+	auto dtLayout = new QHBoxLayout{};
+	auto dtLabel = new QLabel{"Δt (Zeitschritt)"};
+	auto dtSpin = new QDoubleSpinBox{};
+	dtSpin->setRange(0.0001, 100.0);
+	dtSpin->setDecimals(5);
+	dtSpin->setValue(0.001);
+	dtLayout->addWidget(dtLabel);
+	dtLayout->addWidget(dtSpin);
+	controlLayout->addLayout(dtLayout);
+
+	// max Simulation Steps
+	auto mssLayout = new QHBoxLayout{};
+	auto mssLabel = new QLabel{"Max Simulation Steps"};
+	auto mssSpin = new QSpinBox{};
+	mssSpin->setRange(1, 1000);
+	mssSpin->setSingleStep(1);
+	mssSpin->setValue(10);
+	mssLayout->addWidget(mssLabel);
+	mssLayout->addWidget(mssSpin);
+	controlLayout->addLayout(mssLayout);
+
+
+	auto boundaryConditionLayout = new QHBoxLayout{};
+	auto boundaryConditionLabel = new QLabel{"Randbedingung"};
+	auto boundaryConditionCombo = new QComboBox{};
+	boundaryConditionCombo->addItem("Eine Ecke", QVariant::fromValue(0));
+	boundaryConditionCombo->addItem("Zwei Ecken", QVariant::fromValue(1));
+	boundaryConditionCombo->addItem("Diagonale Ecken", QVariant::fromValue(2));
+	boundaryConditionCombo->addItem("Drei Ecken", QVariant::fromValue(3));
+	boundaryConditionCombo->addItem("Alle Ecken", QVariant::fromValue(4));
+	boundaryConditionLayout->addWidget(boundaryConditionLabel);
+	boundaryConditionLayout->addWidget(boundaryConditionCombo);
+	controlLayout->addLayout(boundaryConditionLayout);
+
+
+	QDoubleSpinBox * structKs, * structKd;
+	auto structSpringBlock = createSpringBlock("Struktur-Feder", structKs, structKd, 100, 0.5);
+	controlLayout->addWidget(structSpringBlock);
+
+	QDoubleSpinBox * shearKs, * shearKd;
+	auto shearSpringBlock = createSpringBlock("Scher-Feder", shearKs, shearKd, 50, 0.25);
+	controlLayout->addWidget(shearSpringBlock);
+
+	QDoubleSpinBox * bendKs, * bendKd;
+	auto bendSpringBlock = createSpringBlock("Biege-Feder", bendKs, bendKd, 10, 0.05);
+	controlLayout->addWidget(bendSpringBlock);
+
+
+	// Reset-Button
+	auto resetButton = new QPushButton{"Reset"};
+	controlLayout->addWidget(resetButton);
+
+	auto glWidget = new QWidget{}; // Platzhalter
+	// -> Das tatsächliche Widget wird über das RendererFactory erstellt und dann hier gesetzt
+
+	mainLayout->addWidget(controlGroup);
+	mainLayout->addWidget(glWidget, 1);
+	QWidget::connect(tabWidget, &QTabWidget::currentChanged, [=] (int index) {
+		if(index != current)
+			return;
+
+		mainWindow->setRendererFactory(
+			[=] (QObject * parent) {
+			auto sim = new Prog2_3Simulation{};
+			sim->setParent(parent);
+
+			QObject::connect(resetButton, &QPushButton::clicked, [=] () {
+				sim->reset(
+					dtSpin->value(),
+					static_cast<Prog2_3Simulation::BoundaryCondition>(boundaryConditionCombo->currentData().value<int>()),
+					structKs->value(),
+					structKd->value(),
+					shearKs->value(),
+					shearKd->value(),
+					bendKs->value(),
+					bendKd->value(),
+					mssSpin->value()
+				);
+			});
+
+			return sim;
+		}
+		);
+	});
+
+}
+
+void addExercise2Tab(GLMainWindow * mainWindow, QTabWidget * tabWidget)
+{
+	auto current = tabWidget->count();
+	auto exerciseTab = new QWidget{tabWidget};
+	tabWidget->addTab(exerciseTab, "Exercise 2");
+
+	// Unter-TabWidget für die einzelnen Exercises
+	auto subTabWidget = new QTabWidget{exerciseTab};
+	subTabWidget->setTabPosition(QTabWidget::TabPosition::North);
+
+	// Layout für den Übung 1 Tab
+	auto layout = new QVBoxLayout{exerciseTab};
+	layout->addWidget(subTabWidget);
+
+	// Die bisherigen Exercise-Tabs als Unter-Tabs hinzufügen
+	addEx2_1Tab(mainWindow, subTabWidget);
+	addEx2_2Tab(mainWindow, subTabWidget);
+	addEx2_3Tab(mainWindow, subTabWidget);
+
+	subTabWidget->setCurrentIndex(0);
+
+	QObject::connect(tabWidget, &QTabWidget::currentChanged, [=] (int index) {
+		if(index == current)
+		{
+			emit subTabWidget->currentChanged(subTabWidget->currentIndex());
+		}
+	});
+}
+
 void addSimulationControls(GLMainWindow * mainWindow)
 {
 	auto dock = new QDockWidget("Simulation controls", mainWindow);
 	dock->setAllowedAreas(Qt::DockWidgetArea::RightDockWidgetArea);
 
-	auto tabWidget = new QTabWidget(dock);
-	tabWidget->setTabPosition(QTabWidget::TabPosition::West);
-	dock->setWidget(tabWidget);
+	 auto tabWidget = new QTabWidget(dock);
+    tabWidget->setTabPosition(QTabWidget::TabPosition::West);
+    dock->setWidget(tabWidget);
 
-	addExampleTab(mainWindow, tabWidget);
-	addEx1Tab(mainWindow, tabWidget);
-	addEx2Tab(mainWindow, tabWidget);
-	addEx3Tab(mainWindow, tabWidget);
-	tabWidget->setCurrentIndex(0);
+    addExampleTab(mainWindow, tabWidget);
+    addExercise1Tab(mainWindow, tabWidget); // Nur noch ein Tab für alle Übungen
+	addExercise2Tab(mainWindow, tabWidget); // Übung 2 Tab
+    tabWidget->setCurrentIndex(0);
 
-	mainWindow->addDockWidget(Qt::DockWidgetArea::RightDockWidgetArea, dock);
+    mainWindow->addDockWidget(Qt::DockWidgetArea::RightDockWidgetArea, dock);
 }
 
 int main(int argc, char ** argv)
